@@ -17,16 +17,16 @@ __pycache__/
 auxiliary/__pycache__/
 extension/__pycache__/
 
-# CUDA Extension builds and compiled files
-extension/build/
-extension/dist/
-extension/*.egg-info/
-extension/chamfer.cp*.pyd
-extension/chamfer.cp*.so
-extension/*.obj
-extension/*.exp
-extension/*.lib
-extension/*.pyd
+# # CUDA Extension builds and compiled files
+# extension/build/
+# extension/dist/
+# extension/*.egg-info/
+# extension/chamfer.cp*.pyd
+# extension/chamfer.cp*.so
+# extension/*.obj
+# extension/*.exp
+# extension/*.lib
+# extension/*.pyd
 
 # Ignore entire extension directory (uncomment if you want to ignore everything)
 # extension/
