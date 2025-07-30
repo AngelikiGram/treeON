@@ -1,0 +1,73 @@
+ID,File,Latitude,Longitude,Species,Category,Environment
+1,01-12_91407513-47_41094017-acer_pseudoplatanus.jpg,47.41094017,12.91407513,Acer pseudoplatanus,Deciduous,alpine
+2,02-12_9140111-47_4105479-acer_pseudoplatanus.jpg,47.4105479,12.9140111,Acer pseudoplatanus,Deciduous,alpine
+3,03-12_852151-47_41478152-acer_pseudoplatanus.jpg,47.41478152,12.852151,Acer pseudoplatanus,Deciduous,alpine
+4,04-12_8479726-47_4155875-quercus_petraea.jpg,47.4155875,12.8479726,Quercus petraea,Deciduous,alpine
+5,05-12_8497305-47_4150675-quercus-petraea.jpg,47.4150675,12.8497305,Quercus petraea,Deciduous,alpine
+6,06-12_852384-47_4118062-quercus_petraea.jpg,47.4118062,12.852384,Quercus petraea,Deciduous,alpine
+7,07-12_85257526-47_41228877-quercus_petraea.jpg,47.41228877,12.85257526,Quercus petraea,Deciduous,alpine
+8,08-12_8503475-47_4123787-picea_abies.jpg,47.4123787,12.8503475,Picea abies,Coniferous,alpine
+9,09-12_8521897-47_4153746-picea_abies.jpg,47.4153746,12.8521897,Picea abies,Coniferous,alpine
+10,10-12_5170792-47_19694253-picea_abies.jpg,47.19694253,12.5170792,Picea abies,Coniferous,alpine
+11,11-12_53015917-47_17850629-picea_abies.jpg,47.17850629,12.53015917,Picea abies,Coniferous,alpine
+12,12-12_52976708-47_17840797-picea_abies.jpg,47.17840797,12.52976708,Picea abies,Coniferous,alpine
+13,13-13_79341967-47_32676206-abies.jpg,47.32676206,13.79341967,Picea abies,Coniferous,alpine
+14,14-14_64121541-47_53247619-acer_platanoides.jpg,47.53247619,14.64121541,Acer pseudoplatanus L.,Deciduous,alpine
+15,15-15_8731585-48_01596291-prunus_domestica.jpg,48.01596291,15.8731585,Prunus domestica,Deciduous,flatland
+16,16-16_04551998-47_82326539-quercus_kelloggii.jpg,47.82326539,16.04551998,Quercus kelloggii Newb.,Deciduous,flatland
+17,17-16_15139967-47_94841865-pinus_thunbergii.jpg,47.94841865,16.15139967,Pinus thunbergii Parl.,Coniferous,flatland
+18,18-12_53037775-47_17828647-picea_abies.jpg,47.17828647,12.53037775,Picea abies,Coniferous,alpine
+19,19-12_5305927-47_1781673-picea_abies.jpg,47.1781673,12.5305927,Picea abies,Coniferous,alpine
+20,20-12_5015662-47_0036783-larix_decidua.jpg,47.0036783,12.5015662,Larix decidua,Coniferous,alpine
+21,21-12_4918012-47_0061237-larix_decidua.jpg,47.0061237,12.4918012,Larix decidua,Coniferous,alpine
+22,22-12_494135-47_0062261-picea_abies.jpg,47.0062261,12.494135,Picea abies,Coniferous,alpine
+23,23-12_50650904-47_01321435-Picea_abies.jpg,47.01321435,12.50650904,Picea abies,Coniferous,alpine
+24,24-12_506564-47_0136468-picea_abies.jpg,47.0136468,12.506564,Picea abies,Coniferous,alpine
+25,25-12_50690932-47_01418218-larix_decidua.jpg,47.01418218,12.50690932,Larix decidua,Coniferous,alpine
+26,26-12_5020852-47_0169189-picea_abies.jpg,47.0169189,12.5020852,Picea abies,Coniferous,alpine
+27,27-12_5014331-47_015111-larix_decidua.jpg,47.015111,12.5014331,Larix decidua,Coniferous,alpine
+28,28-12_50282024-47_0154065-picea_abies.jpg,47.0154065,12.50282024,Picea abies,Coniferous,alpine
+29,29-12_50300231-47_01606583-larix_decidua.jpg,47.01606583,12.50300231,Larix decidua,Coniferous,alpine
+30,30-12_50167588-47_0163489-picea_abies.jpg,47.0163489,12.50167588,Picea abies,Coniferous,alpine
+31,31-12_50124535-47_01681543-picea_abies.jpg,47.01681543,12.50124535,Picea abies,Coniferous,alpine
+32,32-12_50208458-47_0169206-picea_abies.jpg,47.0169206,12.50208458,Picea abies,Coniferous,alpine
+33,33-12_50102788-47_01616493-larix_decidua.jpg,47.01616493,12.50102788,Larix decidua,Coniferous,alpine
+34,34-12_50082338-47_01625787-larix_decidua.jpg,47.01625787,12.50082338,Larix decidua,Coniferous,alpine
+35,35-12_5016367-47_01589809-larix_decidua.jpg,47.01589809,12.5016367,Larix decidua,Coniferous,alpine
+36,36-12_5032535-47_0062853-picea_abies.jpg,47.0062853,12.5032535,Picea abies,Coniferous,alpine
+37,37-12_50024206-47_00104443-unkown.jpg,47.00104443,12.50024206,Fraxinus excelsior L.,Deciduous,alpine
+38,38-12_49928795-47_00088123-unkown.jpg,47.00088123,12.49928795,Populus nigra L.,Deciduous,alpine
+39,39-16_405121-48_205217-populus_alba.jpg,48.205217,16.405121,Populus alba,Deciduous,flatland
+40,40-16_405637-48_204740-tilia_cordata.jpg,48.20474,16.405637,Tilia cordata,Deciduous,flatland
+41,41-16_405496-48_204831-tilia_cordata.jpg,48.204831,16.405496,Tilia cordata,Deciduous,flatland
+42,42-16_410374-48_203140-acer_platanoides.jpg,48.20314,16.410374,Acer platanoides,Deciduous,flatland
+43,43-16_411790-48_202423-platanusxacerifolia.jpg,48.202423,16.41179,Platanus x acerifolia,Deciduous,flatland
+44,44-16_420116-48_198356-acer_platanoides.jpg,48.198356,16.420116,Acer platanoides,Deciduous,flatland
+45,45-16_419112-48_198176-corylus_colurna.jpg,48.198176,16.419112,Corylus colurna,Deciduous,flatland
+46,46-16_419074-48_198317-acer_campestre.jpg,48.198317,16.419074,Acer campestre,Deciduous,flatland
+47,47-16_4181504-48_1988784-carpinus_betulus_fastigiata.jpg,48.1988784,16.4181504,Carpinus betulus fastigiata,Deciduous,flatland
+48,48-16_4183429-48_1988516-tilia_platyphyllos.jpg,48.1988516,16.4183429,Tilia platyphyllos,Deciduous,flatland
+49,49-16_418143-48_198891-carpinus_betulus_fastigiata.jpg,48.198891,16.418143,Carpinus betulus fastigiata,Deciduous,flatland
+50,50-16_417866-48_198810-aesculus_hippocastanum.jpg,48.19881,16.41787,Aesculus hippocastanum,Deciduous,flatland
+51,51-16_428420-48_196524-prunus_domestica.jpg,48.196524,16.42842,Prunus domestica,Deciduous,flatland
+52,52-16_441968-48_192497-fraxinus_excelsior.jpg,48.192497,16.441968,Fraxinus excelsior,Deciduous,flatland
+53,53-16_434781-48_195141-prunus_serrulata_kanzan.jpg,48.195141,16.434781,Prunus serrulata,Deciduous,flatland
+54,54-16_437831-48_192698-acer_campestre.jpg,48.192698,16.437831,Acer campestre,Deciduous,flatland
+55,55-16_4368304-48_1926542-acer_pseudoplatanus.jpg,48.1926542,16.4368304,Acer pseudoplatanus,Deciduous,flatland
+56,56-16_4242238-48_1922448-malus_spec.jpg,48.1922448,16.4242238,Malus spec,Deciduous,flatland
+57,57-16_265547-48_090527-pinus_coulteri.jpg,48.090527,16.265547,Pinus coulteri D.Don,Coniferous,flatland
+58,58-16_265647-48_090259-pinus_tabuliformis.jpg,48.090259,16.265647,Pinus tabuliformis Carrière,Coniferous,flatland
+59,59-16_264326_48_09009-quercus_pubescens.jpg,48.09009,16.264326,Quercus pubescens Willd.,Deciduous,flatland
+60,60-16_265729_48_090528-pinus_muricata.jpg,48.090528,16.265729,Pinus muricata D.Don,Coniferous,flatland
+61,61-47_7176394-15_7772944-picea_abies.jpg,47.7176394,15.7772944,Picea abies,Coniferous,alpine
+62,62-47_7255782-15_7862069-pinus_nigra.jpg,47.7255782,15.7862069,Pinus nigra,Coniferous,alpine
+63,63-47_7245204-15_7857719-pinus_nigra.jpg,47.7245204,15.7857719,Pinus nigra,Coniferous,alpine
+64,64-47_7243125-15_7857791-pinus_nigra.jpg,47.7243125,15.7857791,Pinus nigra,Coniferous,alpine
+65,65-47_63602547-15_20310937-larix_decidua.jpg,47.63602547,15.20310937,Larix decidua,Coniferous,alpine
+66,66-47_6425133-15_2054604-acer_opalus.jpg,47.6425133,15.2054604,Acer opalus Mill.,Deciduous,alpine
+67,67-47_6386214-15_2058619-acer_platanoides.jpg,47.6386214,15.2058619,Acer pseudoplatanus L.,Deciduous,alpine
+68,68-47_6383835-15_2062533-acer_platanoides.jpg,47.6383835,15.2062533,Acer pseudoplatanus L.,Deciduous,alpine
+69,69-47_6452884-15_16750137-acer_platanoides.jpg,47.6452884,15.16750137,Acer pseudoplatanus L.,Deciduous,alpine
+70,70-47_64577644-15_16750154-picea_abies.jpg,47.64577644,15.16750154,Picea abies,Coniferous,alpine
+71,71-47_64549384-15_16692994-acer_platanoides.jpg,47.64549384,15.16692994,Acer pseudoplatanus L.,Deciduous,alpine
+72,72-47_6453662-15_16693557-picea_abies.jpg,47.6453662,15.16693557,Picea abies,Coniferous,alpine

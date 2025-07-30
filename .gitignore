@@ -2,15 +2,15 @@
 landmarks_austria/DATA_LANDMARKS/DSM_OBJ/
 landmarks_austria/DATA_LANDMARKS/DSM_TIF/
 landmarks_austria/DATA_LANDMARKS/DATA-GEN/ORTHOPHOTOS/
-landmarks_austria/DATA_LANDMARKS/DSM/
-landmarks_austria/DATA_LANDMARKS/ORTHOPHOTOS/
+# landmarks_austria/DATA_LANDMARKS/DSM/
+# landmarks_austria/DATA_LANDMARKS/ORTHOPHOTOS/
 landmarks_austria/TREE_MODELS/
 landmarks_austria/outputs/
-landmarks_austria/temp/
-landmarks_austria/textures/
+# landmarks_austria/temp/
+# landmarks_austria/textures/
 
 # Ignore entire landmarks_austria directory (uncomment if you want to ignore everything)
-landmarks_austria/
+# landmarks_austria/
 
 # Python Cache Files
 __pycache__/
