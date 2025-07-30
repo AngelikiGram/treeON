@@ -1,0 +1,157 @@
+# Dataset and Large Data Files
+landmarks_austria/DATA_LANDMARKS/DSM_OBJ/
+landmarks_austria/DATA_LANDMARKS/DSM_TIF/
+landmarks_austria/DATA_LANDMARKS/DATA-GEN/ORTHOPHOTOS/
+landmarks_austria/DATA_LANDMARKS/DSM/
+landmarks_austria/DATA_LANDMARKS/ORTHOPHOTOS/
+landmarks_austria/TREE_MODELS/
+landmarks_austria/outputs/
+landmarks_austria/temp/
+landmarks_austria/textures/
+
+# Ignore entire landmarks_austria directory (uncomment if you want to ignore everything)
+landmarks_austria/
+
+# Python Cache Files
+__pycache__/
+auxiliary/__pycache__/
+extension/__pycache__/
+
+# CUDA Extension builds and large compiled files
+extension/build/
+extension/*.egg-info/
+extension/dist/
+extension/chamfer.cp*.pyd
+extension/chamfer.cp*.so
+extension/*.obj
+extension/*.exp
+extension/*.lib
+extension/*.pyd
+extension/chamfer.cp*.so
+
+# Training Outputs and Logs
+log/
+val_npy/
+*.log
+out.log
+*.pth
+*.ckpt
+checkpoints/
+
+# Python Cache and Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# CUDA Extensions
+extension/build/
+extension/*.egg-info/
+extension/chamfer.cp*.pyd
+extension/chamfer.cp*.so
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+conda-meta/
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Model Weights and Checkpoints
+*.pt
+*.pth
+*.bin
+*.safetensors
+model_*.tar
+network_*.pth
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Large Media Files
+*.tar
+*.tar.gz
+*.zip
+*.rar
+*.7z
+*.mat
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Visualization and Output Images
+visualizations/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.svg
+
+# Configuration Files (keep templates, ignore actual configs)
+config.yaml
+config.json
+*.cfg
+!config.example.*
+!config.template.*
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Coverage Reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Documentation Build
+docs/_build/
+docs/build/
+site/
+
+# Backup Files
+*.bak
+*.backup
+*~
+
+# GPU Memory Dumps
+*.nvprof
+*.nsight-*
