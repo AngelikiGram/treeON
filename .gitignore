@@ -17,17 +17,19 @@ __pycache__/
 auxiliary/__pycache__/
 extension/__pycache__/
 
-# # CUDA Extension builds and large compiled files
-# extension/build/
-# extension/*.egg-info/
-# extension/dist/
-# extension/chamfer.cp*.pyd
-# extension/chamfer.cp*.so
-# extension/*.obj
-# extension/*.exp
-# extension/*.lib
-# extension/*.pyd
-# extension/chamfer.cp*.so
+# CUDA Extension builds and compiled files
+extension/build/
+extension/dist/
+extension/*.egg-info/
+extension/chamfer.cp*.pyd
+extension/chamfer.cp*.so
+extension/*.obj
+extension/*.exp
+extension/*.lib
+extension/*.pyd
+
+# Ignore entire extension directory (uncomment if you want to ignore everything)
+extension/
 
 # Training Outputs and Logs
 log/
@@ -48,12 +50,6 @@ __pycache__/
 dist/
 build/
 *.whl
-
-# # CUDA Extensions
-# extension/build/
-# extension/*.egg-info/
-# extension/chamfer.cp*.pyd
-# extension/chamfer.cp*.so
 
 # Virtual Environments
 venv/
