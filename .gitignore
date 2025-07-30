@@ -17,17 +17,17 @@ __pycache__/
 auxiliary/__pycache__/
 extension/__pycache__/
 
-# CUDA Extension builds and large compiled files
-extension/build/
-extension/*.egg-info/
-extension/dist/
-extension/chamfer.cp*.pyd
-extension/chamfer.cp*.so
-extension/*.obj
-extension/*.exp
-extension/*.lib
-extension/*.pyd
-extension/chamfer.cp*.so
+# # CUDA Extension builds and large compiled files
+# extension/build/
+# extension/*.egg-info/
+# extension/dist/
+# extension/chamfer.cp*.pyd
+# extension/chamfer.cp*.so
+# extension/*.obj
+# extension/*.exp
+# extension/*.lib
+# extension/*.pyd
+# extension/chamfer.cp*.so
 
 # Training Outputs and Logs
 log/
