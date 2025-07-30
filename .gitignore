@@ -49,11 +49,11 @@ dist/
 build/
 *.whl
 
-# CUDA Extensions
-extension/build/
-extension/*.egg-info/
-extension/chamfer.cp*.pyd
-extension/chamfer.cp*.so
+# # CUDA Extensions
+# extension/build/
+# extension/*.egg-info/
+# extension/chamfer.cp*.pyd
+# extension/chamfer.cp*.so
 
 # Virtual Environments
 venv/
