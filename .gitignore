@@ -29,7 +29,7 @@ extension/*.lib
 extension/*.pyd
 
 # Ignore entire extension directory (uncomment if you want to ignore everything)
-extension/
+# extension/
 
 # Training Outputs and Logs
 log/
