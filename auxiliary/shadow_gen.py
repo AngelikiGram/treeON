@@ -619,7 +619,6 @@ def soft_point_projection(vis, query_points, occupancy_pred, image_size=124, sig
 
     return image
 
-# import gc
 def soft_point_projectionShadow(vis, query_points, occupancy_pred, image_size=124, sigma=2.0, top_k=5000, axis='y', top_k_points=None, light_directions=None): # sigma=1.5
     """
     Projects the top-K most occupied query points into a 2D differentiable shadow image.
@@ -653,12 +652,6 @@ def soft_point_projectionShadow(vis, query_points, occupancy_pred, image_size=12
     image = differentiableProjection(
         topk_points_shadow, image_size=image_size, sigma=sigma, output_size=image_size, weights=topk_weights, axis=axis
     )# differentiable_point_projectionShadow(
-
-
-    # # Free GPU memory
-    # del topk_points_shadow, topk_weights
-    # torch.cuda.empty_cache()
-    # gc.collect()
 
     return image
 

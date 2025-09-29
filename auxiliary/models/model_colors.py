@@ -85,7 +85,13 @@ class ImplicitOccupancyDecoder(nn.Module):
         # self.fc_rgb = nn.Linear(64, 3)  # Color prediction
 
         # COLOR
-        self.fc_rgb = nn.Linear(64 + self.pe_dim, 3) ##
+        # self.fc_rgb = nn.Linear(64 + self.pe_dim, 3) ##
+
+        # COLOR
+        self.fc_rgb = nn.Sequential(
+            nn.Linear(64 + self.pe_dim, 3),
+            nn.Sigmoid()   # ensure outputs in [0,1]
+        )
 
         self.skip_proj = nn.Linear(self.input_dim, 256)
 
@@ -190,7 +196,7 @@ class PointNetEncoder(nn.Module):
 # Full Tree Reconstruction Net
 # -------------------------------
 class TreeReconstructionNet(nn.Module):
-    def __init__(self, num_points, bottleneck_size=1024, num_frequencies=8):
+    def __init__(self, num_points, bottleneck_size=1024, num_frequencies=8, num_species=18):
         super().__init__()
         self.pc_encoder = PointNetEncoder(bottleneck_size=bottleneck_size)
         self.img_encoder = ResNetEncoderMultiScale(bottleneck_size=bottleneck_size)
@@ -214,8 +220,8 @@ class TreeReconstructionNet(nn.Module):
             nn.Tanh()
         )
 
-        # Binary classifier (0/1 prediction)
-        self.classifier = nn.Linear(bottleneck_size * 2, 2)
+        # Multi-species classifier (adjustable number of classes)
+        self.classifier = nn.Linear(bottleneck_size * 2, num_species)
 
     def forward(self, dsm_pc, orthophoto, query_points, light_dir=None):
         latent_img = self.img_encoder(orthophoto)

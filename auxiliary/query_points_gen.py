@@ -161,7 +161,7 @@ def sample_points_inside_mesh1(B, mesh, num_query_points=15000, jitter_std=0.01,
     noise = torch.randn_like(base_points) * jitter_std
     return base_points + noise
 
-def create_normalized_query_points(B, num_query_points=15000, device='cuda'):
+def create_normalized_query_points1(B, num_query_points=15000, device='cuda'):
     """
     Create query points uniformly sampled in the unit cube [0, 1]^3.
     
@@ -174,6 +174,103 @@ def create_normalized_query_points(B, num_query_points=15000, device='cuda'):
         torch.Tensor: Query points of shape (B, num_query_points, 3) in [0, 1]^3.
     """
     return torch.rand((B, num_query_points, 3), device=device)
+
+
+def create_normalized_query_points(B: int,
+                           num_query_points: int,
+                           device: str = "cuda",
+                           engine_seed: int | None = None) -> torch.Tensor:
+    """
+    DSM-agnostic sampler: scrambled Sobol in [0,1]^3.
+    - Excellent uniformity & projection properties (better than iid uniform).
+    - Independent Owen-scramble per batch (via different seeds).
+
+    Args:
+        B: batch size
+        num_query_points: points per batch
+        device: 'cuda' or 'cpu'
+        engine_seed: base seed for reproducibility (None => random)
+
+    Returns:
+        Tensor of shape (B, num_query_points, 3) in [0,1].
+    """
+    pts_cpu = []
+    for b in range(B):
+        seed = None if engine_seed is None else engine_seed + b
+        eng = torch.quasirandom.SobolEngine(dimension=3, scramble=True, seed=seed)
+        pts_b = eng.draw(num_query_points)   # (N, 3) on CPU, float32 in [0,1)
+        pts_cpu.append(pts_b)
+    pts = torch.stack(pts_cpu, dim=0).to(device)  # (B, N, 3)
+    return pts
+
+# def create_normalized_query_points(
+#     B: int,
+#     num_query_points: int = 15_000,
+#     device: str = "cuda",
+#     method: str = "sobol",
+#     jitter: float = 0.5,
+# ):
+#     """
+#     Create query points in [0,1]^3 using more sophisticated sampling.
+
+#     Args:
+#         B: batch size
+#         num_query_points: number of points per batch
+#         device: 'cuda' or 'cpu'
+#         method: one of {'sobol', 'stratified', 'lhs'}
+#         jitter: controls intra-cell jitter for 'stratified' (0=no jitter, 0.5=mid cell +/- half-cell)
+
+#     Returns:
+#         (B, num_query_points, 3) tensor on `device`, values in [0,1].
+#     """
+#     method = method.lower()
+#     if method not in {"sobol", "stratified", "lhs"}:
+#         raise ValueError("method must be one of {'sobol','stratified','lhs'}")
+
+#     if method == "sobol":
+#         # Low-discrepancy sequence with very uniform coverage and good projection properties.
+#         # Generated on CPU (as required by torch SobolEngine) and moved to device.
+#         engine = torch.quasirandom.SobolEngine(dimension=3, scramble=True)
+#         pts = engine.draw(num_query_points)  # (N, 3) in [0,1)
+#         pts = pts.to(device)
+
+#     elif method == "stratified":
+#         # Partition the cube into a near-cubic grid, sample one point per cell (optionally jittered).
+#         n_per_axis = math.ceil(num_query_points ** (1/3))
+#         # Build cell centers
+#         lin = torch.linspace(0, 1, steps=n_per_axis + 1, device=device)  # cell edges
+#         # cell centers (exclude last edge)
+#         edges = lin[:-1]
+#         cell_size = 1.0 / n_per_axis
+#         centers = edges + 0.5 * cell_size
+
+#         gx, gy, gz = torch.meshgrid(centers, centers, centers, indexing='ij')
+#         grid = torch.stack([gx, gy, gz], dim=-1).reshape(-1, 3)  # (n_per_axis^3, 3)
+
+#         if jitter > 0:
+#             # jitter uniformly within each cell, limited by `jitter` fraction of half-cell
+#             max_offset = (cell_size * jitter)
+#             grid = grid + (torch.rand_like(grid) * 2 - 1) * max_offset
+#             grid.clamp_(0.0, 1.0)
+
+#         pts = grid[:num_query_points]  # trim excess
+
+#     else:  # method == 'lhs'
+#         # Latin Hypercube: ensures one sample per stratum along each axis
+#         n = num_query_points
+#         # strata edges per axis
+#         strata = (torch.rand(n, 3, device=device) + torch.arange(n, device=device).unsqueeze(1)) / n  # (n,3)
+#         # independent random permutations per axis
+#         perm_x = torch.randperm(n, device=device)
+#         perm_y = torch.randperm(n, device=device)
+#         perm_z = torch.randperm(n, device=device)
+#         pts = torch.stack([strata[perm_x, 0], strata[perm_y, 1], strata[perm_z, 2]], dim=1)
+#         # clamp (should already be within [0,1))
+#         pts = pts.clamp_(0.0, 1.0)
+
+#     # Tile for batch
+#     pts = pts.unsqueeze(0).expand(B, -1, -1).contiguous()
+#     return pts
 
 # def create_normalized_query_points(B, num_query_points=15000, device='cuda'):
 #     """

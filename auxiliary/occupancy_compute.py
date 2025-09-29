@@ -66,14 +66,6 @@ def compute_occupancy(B, custom_query_points, gt_custom_mask, top_k=1000, thresh
         gt_custom_occupancy[b] = (min_distances <= threshold).float().unsqueeze(-1)
 
     return gt_custom_occupancy
-    # gt_custom_occupancy = torch.zeros((B, custom_query_points.shape[1], 1), device=custom_query_points.device)
-    # for b in range(B):
-    #     # Check if each query point is inside the shadow
-    #     distances = torch.cdist(custom_query_points[b], gt_custom_mask[b])
-    #     min_distances, _ = distances.min(dim=-1)
-    #     threshold_value = torch.kthvalue(min_distances, top_k).values
-    #     gt_custom_occupancy[b] = (min_distances <= threshold_value).float().unsqueeze(-1)
-    # return gt_custom_occupancy
 
 def compute_occupancy_top_k(B, custom_query_points, gt_custom_mask, top_k=1000):
     """

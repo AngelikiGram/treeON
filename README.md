@@ -1,5 +1,18 @@
 # Network Tree Generation (P2)
 
+nohup `CUDA_VISIBLE_DEVICES=0 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 1200 --top_k 2500 --thres 25 --env mixed_noClasses --bce true --shadow true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --top_k_gt_occupancy true --dsm_convex_hull true > out.log 2>&1` &
+
+nohup `CUDA_VISIBLE_DEVICES=1 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 1200 --top_k 2500 --thres 25 --env mixed_noClasses_thres --bce true --shadow true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --dsm_convex_hull true > out.log 2>&1` &
+
+nohup `CUDA_VISIBLE_DEVICES=2 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 1200 --top_k 2500 --thres 25 --env mixed_classes --bce true --classes_loss true --shadow true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --dsm_convex_hull true --top_k_gt_occupancy true > out.log 2>&1` &
+
+nohup `CUDA_VISIBLE_DEVICES=3 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 1200 --top_k 2500 --thres 25 --env mixed_classes_thres --bce true --shadow true --classes_loss true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --dsm_convex_hull true > out.log 2>&1` &
+
+nohup `CUDA_VISIBLE_DEVICES=7 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 700 --top_k 2500 --thres 25 --env test --bce true --shadow true --classes_loss true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --dsm_convex_hull true > out.log 2>&1` &
+
+# diff class losses 
+nohup `CUDA_VISIBLE_DEVICES=6 python train1.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 700 --top_k 2500 --thres 25 --env test1 --bce true --shadow true --classes_loss true --silhouettes true --model 1 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --dsm_convex_hull true > out.log 2>&1` &
+
 A neural network-based system for generating 3D tree models with realistic rendering capabilities, including shadows, silhouettes, and color information.
 
 ## Current Experiments
@@ -167,33 +180,6 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
 nohup `CUDA_VISIBLE_DEVICES=0 python train.py --port 8099 --image_size 90 --batchSize 16 --num_points 2500 --num_query 17000 --num_trees 1200 --top_k 2500 --thres 25 --env mixed_classes --bce true --shadow true --silhouettes true --classes_loss true --model 3 --top_k_shadows 2500 --model_previous_training true --nepoch 700 --variable 3 --top_k_gt_occupancy true > out.log 2>&1` &
 ```
 
-#### Experimental Training (Current Research)
-
-**Mixed Classes with GT Occupancy:**
-```bash
-nohup CUDA_VISIBLE_DEVICES=1 python train.py \
-    --port 8099 \
-    --image_size 90 \
-    --batchSize 16 \
-    --num_points 2500 \
-    --num_query 17000 \
-    --num_trees 1200 \
-    --top_k 2500 \
-    --deciduous true \
-    --thres 25 \
-    --env mixed_classes \
-    --bce true \
-    --shadow true \
-    --silhouettes true \
-    --classes_loss true \
-    --model 3 \
-    --top_k_shadows 2500 \
-    --model_previous_training true \
-    --nepoch 700 \
-    --variable 3 \
-    --top_k_gt_occupancy true > out.log 2>&1 &
-```
-
 **Stop Training:**
 ```bash
 pkill -f "python train.py"
@@ -204,7 +190,7 @@ pkill -f "python train.py"
 Generate renderings using Blender:
 
 ```bash
-"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe" --python gen_renderings.py
+"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe" --python gen_renderings.py
 ```
 
 ### Key Parameters
@@ -231,6 +217,8 @@ CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py \
     --deciduous true \
     --variable 2 \
     --top_k_max 1200
+
+CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py --env mixed_noClasses_thres --num_query_points 85000 --top_k 4000 --num_points 4000 --model 1 --deciduous true --variable 3 --top_k_max 12000
 ```
 
 ## Dataset
@@ -273,6 +261,7 @@ rsync -avz -e "ssh -p 31415" --exclude='.git' /mnt/c/Users/mmddd/Documents/netwo
 # SSH connection with port forwarding
 ssh -L 8097:localhost:8097 -L 8098:localhost:8098 -L 8099:localhost:8099 -L 8090:localhost:8090 -L 8091:localhost:8091 -L 8092:localhost:8092 agrammat@atlas.cg.tuwien.ac.at
 
+
 ssh -L 8097:localhost:8097 -L 8098:localhost:8098 -L 8099:localhost:8099 -L 8090:localhost:8090 -L 8091:localhost:8091 -L 8092:localhost:8092 -p 31415 grammatikakis1@dgxa100.icsd.hmu.gr
 
 # Sync project files
@@ -280,6 +269,8 @@ rsync -avz -e "ssh -p 22" --exclude='.git' /mnt/c/Users/mmddd/Documents/network-
 
 # Sync dataset
 rsync -avz -e "ssh -p 22" /mnt/d/TREES_DATASET/TREES_DATASET.tar agrammat@atlas.cg.tuwien.ac.at:~/Desktop/
+
+rsync -avz -e "ssh -p 31415" /mnt/c/Users/mmddd/Documents/PUNet_DATASET.tar grammatikakis1@dgxa100.icsd.hmu.gr:~/
 ```
 
 ### Process Management

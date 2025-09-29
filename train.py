@@ -80,7 +80,7 @@ opt = parser.parse_args()
 print(opt)
 
 def collate_fn(batch):
-    imgs, points, initial_vertices, index_views, shadow_orthos, labels, colors = zip(*batch)
+    imgs, points, initial_vertices, index_views, shadow_orthos, labels, colors, _ = zip(*batch)
 
     imgs = torch.stack([torch.tensor(img, dtype=torch.float32) if isinstance(img, np.ndarray) else img for img in imgs])
     points = torch.stack([torch.tensor(p, dtype=torch.float32) if isinstance(p, np.ndarray) else p for p in points])
@@ -90,7 +90,9 @@ def collate_fn(batch):
     labels = torch.tensor(labels, dtype=torch.long)
     colors = torch.stack([torch.tensor(c, dtype=torch.float32) if isinstance(c, np.ndarray) else c for c in colors])
 
-    return imgs, points, initial_vertices, index_views, shadow_ortho, labels, colors
+    filenames = None
+
+    return imgs, points, initial_vertices, index_views, shadow_ortho, labels, colors, filenames
 
 # ----------------------
 
@@ -209,7 +211,7 @@ def compute_losses_and_forward_pass(network, data, light_directions, opt, lpips_
     Compute forward pass and losses for both training and validation.
     Returns: loss, tree_occ_loss, shadow_occ_loss, bce_occ_loss, color_loss, loss_class, visualizations
     """
-    orthophoto, gt_mesh, dsm_pc, index_view, shadow_ortho, labels, gt_colors = data
+    orthophoto, gt_mesh, dsm_pc, index_view, shadow_ortho, labels, gt_colors, filenames = data
     labels = labels.cuda()
     orthophoto, gt_mesh, dsm_pc, shadow_ortho = orthophoto.cuda(), gt_mesh.cuda(), dsm_pc.cuda(), shadow_ortho.cuda()
     gt_colors = gt_colors.cuda()
@@ -231,7 +233,7 @@ def compute_losses_and_forward_pass(network, data, light_directions, opt, lpips_
         full_query_points = sample_points_in_convex_hull(B, dsm_pc, num_query_points=opt.num_query)
     elif opt.variable == '3':
         full_query_points = create_normalized_query_points(B, num_query_points=opt.num_query)
-    
+
     query_points = full_query_points[:B].clone()
     if opt.top_k_gt_occupancy:
         gt_occupancy = compute_occupancy_top_k(B, query_points, gt_mesh, top_k=opt.top_k)
@@ -315,7 +317,8 @@ def compute_losses_and_forward_pass(network, data, light_directions, opt, lpips_
         'dsm_pc': dsm_pc,
         'orthophoto': orthophoto,
         'gt_colors': gt_colors,
-        'pred_colors': pred_colors
+        'pred_colors': pred_colors,
+        'filenames': filenames,
     }
 
 import torchvision.utils as vutils
@@ -372,7 +375,6 @@ def save_visualization_images(vis_data, epoch, batch_idx, save_dir, mode="train"
     
     print(f"Saved visualization images for {mode} epoch {epoch}, batch {batch_idx}")
 
-import gc
 def compute_silhouette_losses(query_points, occupancy_pred, gt_occupancy, gt_mesh, lpips_loss_fn, opt):
     """Compute silhouette losses for multiple rotations"""
     rotations = [
@@ -402,11 +404,6 @@ def compute_silhouette_losses(query_points, occupancy_pred, gt_occupancy, gt_mes
         total_loss = total_loss + loss
         
         vis_data[angle] = (gt_shadow, pred_shadow)
-
-        # Free GPU memory
-        del rotated_mesh, rotated_query, pred_shadow, gt_shadow, loss
-        torch.cuda.empty_cache()
-        gc.collect()
 
     # pred_shadow = soft_point_projection(None, rotated_query, occupancy_pred, 
     #                                     image_size=int(opt.image_size), top_k=opt.top_k, axis='z')
@@ -552,6 +549,8 @@ if __name__ == "__main__":
     gt_shadow_img, pred_shadow_img = None, None
     from DISTS_pytorch import DISTS
     D = DISTS().to(device)
+    
+    filenames = None
     for epoch in range(start_epoch, opt.nepoch):
         train_loss.reset()
         network.train()
@@ -638,7 +637,7 @@ if __name__ == "__main__":
                     # print("First 3 predicted colors:", pred_colors[0][topk_indices[0][:3]].detach().cpu().numpy())
                 
                 # Regular visualization
-                visualize(network, vis, "Train", result['dsm_pc'], result['query_points'], gt_points_vis, occupied_points_vis, result['orthophoto'], result['gt_mesh'], result['gt_occupancy'], result['occupancy_pred'])
+                visualize(network, vis, "Train", result['dsm_pc'], result['query_points'], gt_points_vis, occupied_points_vis, result['orthophoto'], result['gt_mesh'], result['gt_occupancy'], result['occupancy_pred'], result['filenames'])
 
                 # Visualize shadows/silhouettes if enabled
                 if 'shadow' in result['vis_data']:

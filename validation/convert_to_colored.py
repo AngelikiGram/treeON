@@ -10,8 +10,7 @@ import numpy as np
 from skimage import io, exposure
 import math
 
-model_name = "mixed"  # TOCHANGE
-model_name = "mixed_lessSh" # -POINTY"
+model_name = "mixed_all" # _noCl"  # TOCHANGE
 pointcloud = True # False
 dsm = False # True
 
@@ -19,9 +18,7 @@ dsm = False # True
 # Saved in 'outputs' folder
 
 # ========== CONFIG ==========
-dir = "C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//outputs/trees-colored"
-os.makedirs(dir, exist_ok=True)
-base_folder = 'C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//'
+base_folder = 'C://Users//mmddd//Documents//network-tree-gen//landmarks_austria//'
 tree_folder = f"TREE_MODELS//{model_name}" 
 tree_folder = os.path.join(base_folder, tree_folder)
 output_folder = f"outputs/trees-meshes/{model_name}"
@@ -32,9 +29,9 @@ if pointcloud:
     output_folder = os.path.join(base_folder, output_folder)
     os.makedirs(output_folder, exist_ok=True)
 if dsm: 
-    tree_folder = "DSM_OBJ"  
+    tree_folder = "DATA_LANDMARKS/DSM_OBJ"  
     output_folder = f"outputs/dsm/{model_name}"
-ortho_folder = "ORTHOPHOTOS"
+ortho_folder = "DATA_LANDMARKS/ORTHOPHOTOS"
 texture_folder = "textures"
 temp_folder = "temp"
 tree_folder = os.path.join(base_folder, tree_folder)
@@ -165,6 +162,11 @@ def sample_texture_color(image_path, uv_coord):
         return img.getpixel((x, y))
     except Exception as e:
         print(f"[WARNING] Failed to sample texture {image_path}: {e}")
+        # If the file cannot be opened, check if it exists and is a valid image
+        if not os.path.isfile(image_path):
+            print(f"[ERROR] Texture file does not exist: {image_path}")
+        else:
+            print(f"[ERROR] Texture file is not a valid image: {image_path}")
         # Return a default color (green for crown, brown for bark)
         if "bark" in image_path.lower():
             return (101, 67, 33)  # Brown
@@ -190,8 +192,9 @@ def export_colored_pointcloud_from_mesh_coords(ply_path, output_path, obj, crown
     bm = bmesh.new()
     bm.from_mesh(mesh)
     verts = [v.co.copy() for v in bm.verts]
-    bm.free()
     bpy.data.objects.remove(obj, do_unlink=True)
+    # Only free bm after all mesh operations are complete
+    bm.free()
 
     if not verts:
         print(f"[ERROR] No vertices found in: {ply_path}")
@@ -249,8 +252,9 @@ def import_point_cloud_as_colored_points(ply_path, matched_texture, matched_text
     bm = bmesh.new()
     bm.from_mesh(mesh)
     verts = [v.co.copy() for v in bm.verts]
-    bm.free()
     bpy.data.objects.remove(point_cloud, do_unlink=True)
+    # Only free bm after all mesh operations are complete
+    bm.free()
 
     if len(verts) == 0:
         print(f"[WARNING] No vertices found in: {ply_path}")
@@ -301,7 +305,7 @@ for fname in os.listdir(tree_folder):
     tree_id = os.path.splitext(fname)[0].split('_')[1] 
     tree_path = os.path.join(tree_folder, fname)
     ortho_path = os.path.join(ortho_folder, f"ortho_{tree_id}.png")
-    matched_texture = os.path.join(temp_folder, f"crown.jpg")
+    matched_texture = os.path.join(temp_folder, f"{tree_id}-crown.jpg")
     matched_texture_bark = os.path.join(temp_folder, f"{tree_id}-bark.jpg")
     render_output = os.path.join(output_folder, f"{tree_id}.png")
 
@@ -315,7 +319,7 @@ for fname in os.listdir(tree_folder):
     target_ids = ['5', '10', '11', '12', '13', '15', '17', '18', '22', '24', '25', '26', '28', '29', '30', '31', '32', '33', '34', '35', '36', '38', '55', '57', '61', '72', '69', '67', '68']
     if not any(tid in render_output for tid in target_ids):
         print(f"Skipping {tree_id}")
-        continue
+        # continue
 
     try:
         match_histogram_texture(template_texture, ortho_path, matched_texture)
@@ -339,7 +343,7 @@ for fname in os.listdir(tree_folder):
     colored_output = os.path.join(output_folder, f"tree_{tree_id}.ply")
     if os.path.exists(colored_output):
         print(f"[SKIP] Output already exists: {tree_id}")
-        #continue
+        continue
 
     try:
         # Skip if output already exists

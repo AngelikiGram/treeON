@@ -19,10 +19,31 @@ class FourierEncoder(nn.Module):
     def forward(self, x):
         x = 2.0 * (x - 0.5)  # Normalize to [-1, 1]
         B, N, D = x.shape
-        x_proj = x[..., None] * self.frequencies  # [B, N, D, F]
-        x_proj = x_proj.view(B, N, -1)  # [B, N, D*F]
-        encoded = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
-        return torch.cat([x, encoded], dim=-1)  # [B, N, D + 2*D*F]
+        
+        # Process in chunks to avoid memory issues with large N
+        if N > 16384:  # Only chunk if N is large
+            chunk_size = 8192
+            encoded_chunks = []
+            
+            for i in range(0, N, chunk_size):
+                end_idx = min(i + chunk_size, N)
+                chunk = x[:, i:end_idx, :]  # [B, chunk_size, D]
+                
+                x_proj = chunk[..., None] * self.frequencies  # [B, chunk_size, D, F]
+                x_proj = x_proj.view(B, end_idx - i, -1)  # [B, chunk_size, D*F]
+                encoded = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
+                chunk_result = torch.cat([chunk, encoded], dim=-1)  # [B, chunk_size, D + 2*D*F]
+                
+                encoded_chunks.append(chunk_result)
+                del chunk, x_proj, encoded  # Free memory
+                
+            return torch.cat(encoded_chunks, dim=1)
+        else:
+            # Original implementation for smaller tensors
+            x_proj = x[..., None] * self.frequencies  # [B, N, D, F]
+            x_proj = x_proj.view(B, N, -1)  # [B, N, D*F]
+            encoded = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
+            return torch.cat([x, encoded], dim=-1)  # [B, N, D + 2*D*F]
 
 # -------------------------------
 # Fine Occupancy Refiner
@@ -50,9 +71,9 @@ class ImplicitOccupancyDecoder(nn.Module):
     def __init__(self, bottleneck_size=1024, num_frequencies=25):
         super().__init__()
         self.pe = FourierEncoder(num_frequencies)
-        latent_dim = bottleneck_size + 64  # bottleneck_size + category_embed_dim
+        latent_dim = bottleneck_size + 64
         self.pe_dim = 3 + 2 * 3 * num_frequencies  # = 153
-        self.input_dim = latent_dim + self.pe_dim  # latent_dim + 153
+        self.input_dim = latent_dim + self.pe_dim  # 2112 + 153 = 2265
 
         self.fc_in = nn.Linear(self.input_dim, 512)
         self.fc2 = nn.Sequential(nn.Linear(512, 512), nn.LayerNorm(512), nn.LeakyReLU(0.01), nn.Dropout(0.3))
@@ -63,53 +84,74 @@ class ImplicitOccupancyDecoder(nn.Module):
         self.fc_occ = nn.Linear(64, 1)
         # self.fc_rgb = nn.Linear(64, 3)  # Color prediction
 
-     #   self.fc_rgb = nn.Linear(64 + self.pe_dim, 3) ##
+        # COLOR
+        # self.fc_rgb = nn.Linear(64 + self.pe_dim, 3) ##
+
+        # COLOR
+        self.fc_rgb = nn.Sequential(
+            nn.Linear(64 + self.pe_dim, 3),
+            nn.Sigmoid()   # ensure outputs in [0,1]
+        )
 
         self.skip_proj = nn.Linear(self.input_dim, 256)
 
     def forward(self, latent, query_points):
         B, N, _ = query_points.shape
-        encoded_points = self.pe(query_points)  # [B, N, pe_dim=153]
-        latent_expanded = latent.unsqueeze(1).expand(-1, N, -1)  # [B, N, latent_dim]
-        x = torch.cat([latent_expanded, encoded_points], dim=-1)  # [B, N, input_dim]
-        x = x.view(B * N, -1) 
+        
+        # Process in chunks to reduce memory usage
+        chunk_size = min(8192, N)  # Process in smaller chunks
+        occupancy_chunks = []
+        color_chunks = []
+        feature_chunks = []
+        
+        for i in range(0, N, chunk_size):
+            end_idx = min(i + chunk_size, N)
+            chunk_points = query_points[:, i:end_idx, :]  # [B, chunk_size, 3]
+            chunk_size_actual = end_idx - i
+            
+            encoded_points = self.pe(chunk_points)  # [B, chunk_size, pe_dim=153]
+            latent_expanded = latent.unsqueeze(1).expand(-1, chunk_size_actual, -1)  # [B, chunk_size, 2112]
+            x = torch.cat([latent_expanded, encoded_points], dim=-1)  # [B, chunk_size, 2265]
+            x = x.view(B * chunk_size_actual, -1) 
 
-        skip = self.skip_proj(x)
-        x = F.leaky_relu(self.fc_in(x), negative_slope=0.01)
-        x = self.fc2(x)
-        x = F.leaky_relu(self.fc3(x) + skip, negative_slope=0.01)
-        x = self.fc4(x)
-        x = self.fc5(x)
-        x = self.fc6(x)
+            skip = self.skip_proj(x)
+            x = F.leaky_relu(self.fc_in(x), negative_slope=0.01)
+            x = self.fc2(x)
+            x = F.leaky_relu(self.fc3(x) + skip, negative_slope=0.01)
+            x = self.fc4(x)
+            x = self.fc5(x)
+            x = self.fc6(x)
 
-        features_out = x
-        occupancy = self.fc_occ(features_out)
+            features_out = x
+            occupancy = self.fc_occ(features_out)
 
-        # color = self.fc_rgb(features_out) 
+            # COLOR
+            encoded_flat = encoded_points.view(B * chunk_size_actual, -1)  # [B*chunk_size, pe_dim]
+            color_input = torch.cat([features_out, encoded_flat], dim=-1)  # [B*chunk_size, 64 + pe_dim]
+            color = self.fc_rgb(color_input)  # [B*chunk_size, 3]
 
-        # Add encoded position to the color branch:
-   #     encoded_flat = encoded_points.view(B * N, -1)  # [B*N, pe_dim]
-    #    color_input = torch.cat([features_out, encoded_flat], dim=-1)  # [B*N, 64 + pe_dim]
-    #    color = self.fc_rgb(color_input)  # [B*N, 3]
-
-        # return occupancy.view(B, N, 1), color.view(B, N, 3), features_out.view(B, N, -1)
-        return occupancy.view(B, N, 1), features_out.view(B, N, -1)
+            occupancy_chunks.append(occupancy.view(B, chunk_size_actual, 1))
+            color_chunks.append(color.view(B, chunk_size_actual, 3))
+            feature_chunks.append(features_out.view(B, chunk_size_actual, -1))
+            
+            # Clear intermediate variables to free memory
+            del x, features_out, encoded_points, latent_expanded, skip, color_input
+            torch.cuda.empty_cache()
+        
+        # Concatenate all chunks
+        final_occupancy = torch.cat(occupancy_chunks, dim=1)  # [B, N, 1]
+        final_color = torch.cat(color_chunks, dim=1)  # [B, N, 3]
+        final_features = torch.cat(feature_chunks, dim=1)  # [B, N, 64]
+        
+        return final_occupancy, final_color, final_features
 
 # -------------------------------
 # ResNet18 Multi-scale Encoder
 # -------------------------------
 class ResNetEncoderMultiScale(nn.Module):
-    def __init__(self, bottleneck_size=1024, input_channels=3):
+    def __init__(self, bottleneck_size=1024):
         super().__init__()
         resnet = models.resnet18(pretrained=True)
-        
-        # Replace first conv layer to handle different input channels
-        if input_channels != 3:
-            original_conv = resnet.conv1
-            resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-            # Initialize new conv layer
-            nn.init.kaiming_normal_(resnet.conv1.weight, mode='fan_out', nonlinearity='relu')
-        
         self.layer1 = nn.Sequential(*list(resnet.children())[:5])
         self.layer2 = resnet.layer2
         self.layer3 = resnet.layer3
@@ -154,7 +196,7 @@ class PointNetEncoder(nn.Module):
 # Full Tree Reconstruction Net
 # -------------------------------
 class TreeReconstructionNet(nn.Module):
-    def __init__(self, num_points, bottleneck_size=1024, num_frequencies=8):
+    def __init__(self, num_points, bottleneck_size=1024, num_frequencies=8, num_species=18):
         super().__init__()
         self.pc_encoder = PointNetEncoder(bottleneck_size=bottleneck_size)
         self.img_encoder = ResNetEncoderMultiScale(bottleneck_size=bottleneck_size)
@@ -178,9 +220,29 @@ class TreeReconstructionNet(nn.Module):
             nn.Tanh()
         )
 
-        # Binary classifier (0/1 prediction)
-        self.classifier = nn.Linear(bottleneck_size, 2)
+        # Multi-species classifier (adjustable number of classes)
+        self.classifier = nn.Linear(bottleneck_size, num_species)
 
+    # def forward(self, dsm_pc, orthophoto, query_points, light_dir=None):
+    #     latent_img = self.img_encoder(orthophoto)
+    #     latent_img = self.img_fc(latent_img)
+    #     latent_img = F.normalize(latent_img, dim=-1)
+
+    #     latent_pc = self.pc_encoder(dsm_pc)
+    #     latent_pc = F.normalize(latent_pc, dim=-1)
+
+    #     combined_latent = torch.cat([latent_pc, latent_img], dim=1)
+    #     class_logits = self.classifier(combined_latent)
+    #     category_embed = self.category_predictor(combined_latent)
+    #     latent = torch.cat([combined_latent, category_embed], dim=1)
+
+    #     coarse_occ, coarse_rgb, coarse_features = self.decoder(latent, query_points)
+    #     # coarse_occ, coarse_features = self.decoder(latent, query_points)
+    #     refined_delta = self.refiner(coarse_features)
+    #     final_occ = coarse_occ + refined_delta
+
+    #     return final_occ, class_logits, coarse_rgb
+    
     def forward(self, dsm_pc, orthophoto, query_points, light_dir=None):
         # latent_img = self.img_encoder(orthophoto)
         # latent_img = self.img_fc(latent_img)
@@ -189,13 +251,15 @@ class TreeReconstructionNet(nn.Module):
         latent_pc = self.pc_encoder(dsm_pc)
         latent_pc = F.normalize(latent_pc, dim=-1)
 
-        class_logits = self.classifier(latent_pc)
-        category_embed = self.category_predictor(latent_pc)
-        latent = torch.cat([latent_pc, category_embed], dim=1)
+        combined_latent = latent_pc # torch.cat([latent_pc, latent_img], dim=1)
+        class_logits = self.classifier(combined_latent)
+        category_embed = self.category_predictor(combined_latent)
+        latent = torch.cat([combined_latent, category_embed], dim=1)
 
         # coarse_occ, coarse_rgb, coarse_features = self.decoder(latent, query_points)
-        coarse_occ, coarse_features = self.decoder(latent, query_points)
+        # coarse_occ, coarse_features = self.decoder(latent, query_points)
+        coarse_occ, coarse_rgb, coarse_features = self.decoder(latent, query_points)
         refined_delta = self.refiner(coarse_features)
         final_occ = coarse_occ + refined_delta
 
-        return final_occ, class_logits#, coarse_rgb
+        return final_occ, class_logits, coarse_rgb

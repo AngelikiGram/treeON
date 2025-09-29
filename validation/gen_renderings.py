@@ -1,554 +1,499 @@
-import sys
-import site
+# --- Minimal tree renderer (Blender 4.x) -------------------------------------
+# - PLY: renders colored point clouds via Geometry Nodes
+# - OBJ: imports a mesh and (optionally) applies a histogram-matched texture
+# ------------------------------------------------------------------------------
+
+import sys, site, os, csv, math
 site_path = site.getusersitepackages()
 if site_path not in sys.path:
     sys.path.append(site_path)
-import os
+
 import numpy as np
 from skimage import io, exposure
 
 import bpy
-import os
-import numpy as np
-import math
+import bmesh
+from mathutils import Vector, Euler
 
-tree_main_folder = "C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//TREE_MODELS"
-for folder in os.listdir(tree_main_folder):
-    tree_folder = os.path.join(tree_main_folder, folder)
-    
+# ===================== CONFIG =====================
 
-model_name = "mixed_lessSh" # "_DENSE" #_DENSE-POINTY _mixed-POINTY (this we want with mixed for MS) # "mixed"  # TOCHANGE
-splats = False # True
-pointcloud = True # False
-dsm = True # False # True
+MODEL_NAME   = "test" # TOCHANGE -- DSM
+MODE_NAME = "colored" # TOCHANGE (colored, trunk, points)
+supersample = True # TOCHANGE
 
-# ========== CONFIG ==========
-# pointcloud, dsm FALSE -> TREE
-# dsm TRUE -> DSM
-# pointcloud TRUE, dsm FALSE -> POINTCLOUD
-base_folder = 'C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//'
-tree_folder = f"TREE_MODELS//{model_name}"
-if splats:
-    tree_folder = f"TREE_MODELS//SPLATS//{model_name}"
-output_folder = f"outputs/trees-meshes/{model_name}"
-if pointcloud: 
-    tree_folder = f"TREE_MODELS//{model_name}/pointclouds-landmarks"  
-    output_folder = f"outputs/{model_name}"
-    if splats:
-        tree_folder = f"TREE_MODELS//SPLATS//{model_name}//"
-        os.makedirs(os.path.join(base_folder, "outputs/trees-pointclouds/SPLATS"), exist_ok=True)
-        output_folder = f"outputs/trees-pointclouds/SPLATS/{model_name}"
-if dsm: 
-    tree_folder = "DSM_OBJ"  
-    output_folder = f"outputs/dsm/{model_name}"
-ortho_folder = "ORTHOPHOTOS"
-texture_folder = "textures"
-temp_folder = "temp"
-tree_folder = os.path.join(base_folder, tree_folder)
-ortho_folder = os.path.join(base_folder, ortho_folder)
-texture_folder = os.path.join(base_folder, texture_folder)
-output_folder = os.path.join(base_folder, output_folder)
-os.makedirs(output_folder, exist_ok=True)
-temp_folder = os.path.join(base_folder, temp_folder)
-# template_texture = os.path.join(texture_folder, "coniferous.jpg")  # or deciduous.jpg
-render_resolution = (512, 512) # (512, 512) # (220, 220)
-background_color = (1, 1, 1, 1)  # White RGB
+dsm = False
 
-import os
-import csv
-# Load metadata
-csv_path = os.path.join(base_folder, "trees-data.csv")
-category_map = {}
-with open(csv_path, newline='') as csvfile:
-    reader = csv.DictReader(csvfile)
-    for row in reader:
-        tree_id = row["ID"].zfill(3)  # zero-pad to match '001' format
-        category = row["Category"]
-        category_map[tree_id] = category
+# Color histogram matching config
+ENABLE_HISTOGRAM_MATCHING = True # True  # Set to False to disable histogram matching for point clouds
 
-# import pandas as pd
+# Camera placement config
+CAM_DISTANCE = 85.0
+CAM_RELATIVE_TO_SIZE = True  # <--- Set this boolean to choose camera placement mode
+CAM_SIZE_FACTOR = 2.5        # Camera will be placed at (size * factor) from object center if CAM_RELATIVE_TO_SIZE is True
 
-# # Load metadata
-# csv_path = os.path.join(base_folder, "trees-data.csv")
-# df = pd.read_csv(csv_path)
-# # Make ID the index for quick lookup
-# df["ID"] = df["ID"].astype(str).str.zfill(3)  # zero-pad to match '001' format
-# category_map = dict(zip(df["ID"], df["Category"]))
+BASE = r"C:\Users\mmddd\Documents\P2\network-tree-gen\landmarks_austria"
+TREE_DIR     = os.path.join(BASE, "TREE_MODELS", MODEL_NAME, "pointclouds-landmarks") 
+if dsm:
+    TREE_DIR     = r"C:\Users\mmddd\Documents\P2\network-tree-gen\landmarks_austria\DATA_LANDMARKS\DSM_OBJ"
+ORTHO_DIR    = os.path.join(BASE, "DATA_LANDMARKS", "ORTHOPHOTOS")
+TEXTURE_DIR  = os.path.join(BASE, "textures")
+TEMP_DIR     = os.path.join(BASE, "temp")
+OUT_DIR      = os.path.join(BASE, "outputs", MODEL_NAME)
+CSV_PATH     = os.path.join(BASE, "trees-data.csv")
 
-# ========== UTILS ==========
+## TOCHANGE: If not supersampled
+if supersample: 
+    TREE_DIR     = os.path.join("C:/Users/mmddd/Documents/P2/supersample_pointclouds/OUTPUTS/", MODE_NAME + "-" + MODEL_NAME) # + '1')   
+    OUT_DIR      = os.path.join(BASE, "outputs", MODEL_NAME, f"supersample9-{MODE_NAME}")
 
-def match_histogram_texture(source_img_file, target_img_file, output_file):
-    source_img = io.imread(source_img_file).astype(float) / 255.0
-    target_img = io.imread(target_img_file).astype(float) / 255.0
-    matched = np.empty_like(source_img)
-    for c in range(3):
-        matched[:, :, c] = exposure.match_histograms(source_img[:, :, c], target_img[:, :, c])
-    io.imsave(output_file, (matched * 255).astype(np.uint8))
+RENDER_SIZE  = (512, 512)
+DEFAULT_POINT_RADIUS = 0.05 # 01 # fallback value
+ROTATE_PC_X90 = False  # rotate point clouds around X by +90° if needed
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(OUT_DIR, exist_ok=True)
+
+# ===================== HELPERS =====================
+def load_categories(csv_path):
+    m = {}
+    with open(csv_path, newline="") as f:
+        for row in csv.DictReader(f):
+            m[row["ID"].zfill(3)] = row["Category"].strip().lower()
+    return m
+
+CATEGORY = load_categories(CSV_PATH)
 
 def clear_scene():
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete(use_global=False)
 
-def import_mesh(path, matched_texture, matched_texture_bark):
+# def match_histograms(src_img, tgt_img, out_img):
+#     src = io.imread(src_img).astype(float) / 255.0
+#     tgt = io.imread(tgt_img).astype(float) / 255.0
+#     matched = np.empty_like(src)
+#     for c in range(3):
+#         matched[..., c] = exposure.match_histograms(src[..., c], tgt[..., c])
+#     io.imsave(out_img, (matched * 255).astype(np.uint8))
+
+from skimage import exposure, io, img_as_float
+import numpy as np
+
+def match_histograms(src_img, tgt_img, out_img):
+    src = io.imread(src_img)
+    tgt = io.imread(tgt_img)
+
+    print(f"[DEBUG] src shape: {src.shape}, tgt shape: {tgt.shape}")
+
+    # Resize target to match source if needed
+    if src.shape[:2] != tgt.shape[:2]:
+        from skimage.transform import resize
+        tgt = resize(tgt, src.shape, preserve_range=True, anti_aliasing=True).astype(src.dtype)
+        print(f"[DEBUG] Resized tgt to {tgt.shape}")
+
+    # Stats before
+    print(f"[DEBUG] src mean: {src.mean(axis=(0,1))}, std: {src.std(axis=(0,1))}")
+    print(f"[DEBUG] tgt mean: {tgt.mean(axis=(0,1))}, std: {tgt.std(axis=(0,1))}")
+
+    # Match histograms
+    matched = exposure.match_histograms(src, tgt, channel_axis=-1)
+
+    # Stats after
+    print(f"[DEBUG] matched mean: {matched.mean(axis=(0,1))}, std: {matched.std(axis=(0,1))}")
+
+    io.imsave(out_img, matched.astype(np.uint8))
+    print(f"[DEBUG] Saved matched texture to {out_img}")
+
+
+def first_mesh():
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    return meshes[0] if meshes else None
+
+def setup_camera_and_light(target_obj, distance=CAM_DISTANCE):
+    # Camera
+    bbox = [target_obj.matrix_world @ Vector(c) for c in target_obj.bound_box]
+    center = sum(bbox, Vector()) / 8.0
+    # Compute bounding box size
+    size = max((b - a).length for a, b in zip(bbox, bbox[1:] + bbox[:1]))
+    if CAM_RELATIVE_TO_SIZE:
+        cam_dist = size * CAM_SIZE_FACTOR
+    else:
+        cam_dist = distance
+    cam = bpy.data.objects.new("Camera", bpy.data.cameras.new("Camera"))
+    bpy.context.collection.objects.link(cam)
+    cam.location = center + Vector((cam_dist, 0, 0))
+    direction = center - cam.location
+    cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+    bpy.context.scene.camera = cam
+    # Light
+    sun = bpy.data.lights.new(name="Sun", type='SUN')
+    sun.energy = 3.0
+    light_obj = bpy.data.objects.new("Sun", sun)
+    bpy.context.collection.objects.link(light_obj)
+    light_obj.location = (5, 5, 5)
+
+def setup_render(path, size=RENDER_SIZE, transparent=True):
+    scn = bpy.context.scene
+    scn.render.engine = 'CYCLES'
+    scn.render.resolution_x, scn.render.resolution_y = size
+    scn.render.filepath = path
+    scn.render.image_settings.file_format = 'PNG'
+    scn.render.image_settings.color_mode = 'RGBA'
+    scn.render.film_transparent = transparent
+    # World bg white
+    world = scn.world or bpy.data.worlds.new("World")
+    scn.world = world
+    world.use_nodes = True
+    bg = world.node_tree.nodes.get("Background")
+    if bg:
+        bg.inputs[0].default_value = (1, 1, 1, 1)
+
+# ---------- Point cloud loader + GN renderer ----------
+def load_points_with_colors(path):
     ext = os.path.splitext(path)[1].lower()
-    if ext == ".obj":
-        # bpy.ops.import_scene.obj(filepath=path)
-        bpy.ops.wm.obj_import(filepath=path)
-    elif ext == ".ply":
-        if splats: 
-            import_point_cloud_as_splats(path)
-            # Find the node group
-            for ng in bpy.data.node_groups:
-                if "GaussianSplatting" in ng.name:
-                    print("Found node group:", ng.name)
-                    # Access a node inside it
-                    for node in ng.nodes:
-                        print("  Contains node:", node.name)
-                    # Example: access specific node by partial name
-                    target_node = next((n for n in ng.nodes if "Boolean" in n.name), None)
-                    if target_node:
-                        print("  Found Boolean node:", target_node.name)
-                    bpy.data.node_groups["GaussianSplatting"].nodes["Boolean"].boolean = False
+    verts, cols = [], []
+    if ext == ".ply":
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            if not f.readline().startswith("ply"):
+                raise ValueError("Not a PLY file.")
+            format_ascii = False
+            nverts = None
+            prop = []
+            in_vert = False
+            while True:
+                line = f.readline()
+                if not line:
+                    raise ValueError("Unexpected EOF in PLY header.")
+                s = line.strip()
+                if s.startswith("format"):
+                    format_ascii = "ascii" in s
+                    if not format_ascii:
+                        raise ValueError("Only ASCII PLY is supported.")
+                elif s.startswith("element"):
+                    parts = s.split()
+                    in_vert = (len(parts) == 3 and parts[1] == "vertex")
+                    if in_vert:
+                        nverts = int(parts[2])
+                elif s.startswith("property") and in_vert:
+                    prop.append(s.split()[-1])
+                elif s == "end_header":
                     break
-        else: 
-            import_point_cloud_as_spheres(path, matched_texture, matched_texture_bark)
+            ix, iy, iz = prop.index("x"), prop.index("y"), prop.index("z")
+            # Check if color properties exist
+            has_colors = "red" in prop and "green" in prop and "blue" in prop
+            if has_colors:
+                ir, ig, ib = prop.index("red"), prop.index("green"), prop.index("blue")
+            
+            for _ in range(nverts):
+                parts = f.readline().split()
+                if len(parts) < len(prop): continue
+                x, y, z = float(parts[ix]), float(parts[iy]), float(parts[iz])
+                verts.append(Vector((x, y, z)))
+                
+                if has_colors:
+                    r, g, b = int(parts[ir]), int(parts[ig]), int(parts[ib])
+                    cols.append((r/255.0, g/255.0, b/255.0, 1.0))
+                else:
+                    # Default to white color if no color properties
+                    cols.append((1.0, 1.0, 1.0, 1.0))
+    elif ext == ".obj":
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("v "):
+                    p = line.strip().split()
+                    if len(p) >= 7:
+                        x, y, z = map(float, p[1:4])
+                        r, g, b = map(float, p[4:7])
+                        verts.append(Vector((x, y, z)))
+                        cols.append((r, g, b, 1.0))
+    else:
+        raise ValueError(f"Unsupported point format: {ext}")
+    if ROTATE_PC_X90:
+        R = Euler((math.radians(90), 0, 0), 'XYZ').to_matrix().to_4x4()
+        verts = [(R @ v.to_4d()).xyz for v in verts]
+    return verts, cols
 
-def apply_texture(obj, img_path, mat_name="CrownColors"):
-    img = bpy.data.images.load(img_path)
+def create_gn_pointcloud(verts, colors, radius, lit=True):
+    # make mesh with only vertices + POINT color attribute "Col"
+    mesh = bpy.data.meshes.new("PointCloudMesh")
+    obj  = bpy.data.objects.new("PointCloud", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    mesh.from_pydata([tuple(v) for v in verts], [], [])
+    mesh.update()
 
-    mat = bpy.data.materials.get(mat_name) or bpy.data.materials.new(mat_name)
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
+    col_attr = mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
+    n = len(mesh.vertices)
+    
+    # Create a copy of colors to avoid modifying the original list
+    colors_copy = list(colors)
+    
+    # Ensure colors list has exactly n elements
+    if len(colors_copy) < n:
+        # Pad with white color if not enough colors
+        colors_copy = colors_copy + [(1, 1, 1, 1)] * (n - len(colors_copy))
+        print(f"[DEBUG] Padded colors from {len(colors)} to {n} vertices")
+    elif len(colors_copy) > n:
+        # Truncate if too many colors
+        colors_copy = colors_copy[:n]
+        print(f"[DEBUG] Truncated colors from {len(colors)} to {n} vertices")
+    
+    # Safely assign colors
+    for i in range(n):
+        if i < len(colors_copy):
+            col_attr.data[i].color = colors_copy[i]
+        else:
+            col_attr.data[i].color = (1, 1, 1, 1)  # Fallback white color
+            print('[WARNING] Assigned fallback white color to vertex', i)
+
+    # Geometry Nodes: Mesh->Points + Set Material
+    mod = obj.modifiers.new(name="GN_Points", type='NODES')
+    ng = bpy.data.node_groups.new("GN_PointCloud", 'GeometryNodeTree')
+    mod.node_group = ng
+    nodes, links = ng.nodes, ng.links
     nodes.clear()
 
-    output = nodes.new("ShaderNodeOutputMaterial")
-    diffuse = nodes.new("ShaderNodeBsdfDiffuse")
-    tex = nodes.new("ShaderNodeTexImage")
-    tex.image = img
+    gin  = nodes.new('NodeGroupInput')
+    gout = nodes.new('NodeGroupOutput')
+    try:
+        ng.interface.new_socket("Geometry", in_out='INPUT',  socket_type='NodeSocketGeometry')
+        ng.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+    except TypeError:
+        pass
 
-    links.new(tex.outputs["Color"], diffuse.inputs["Color"])
-    links.new(diffuse.outputs["BSDF"], output.inputs["Surface"])
+    n_m2p  = nodes.new('GeometryNodeMeshToPoints')
+    n_setm = nodes.new('GeometryNodeSetMaterial')
 
-    obj.data.materials.clear()
-    obj.data.materials.append(mat)
+    # point size
+    if "Radius" in n_m2p.inputs: n_m2p.inputs["Radius"].default_value = radius
+    elif "Size" in n_m2p.inputs:  n_m2p.inputs["Size"].default_value   = radius
 
-    # UV unwrap
+    # material that reads "Col"
+    mat = bpy.data.materials.new("PointColMat")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    for nd in list(nt.nodes):
+        if nd.type != 'OUTPUT_MATERIAL': nt.nodes.remove(nd)
+    out = nt.nodes["Material Output"]
+    attr = nt.nodes.new("ShaderNodeAttribute"); attr.attribute_name = "Col"
+    if lit:
+        diff = nt.nodes.new("ShaderNodeBsdfDiffuse")
+        nt.links.new(attr.outputs["Color"], diff.inputs["Color"])
+        nt.links.new(diff.outputs["BSDF"], out.inputs["Surface"])
+    else:
+        emit = nt.nodes.new("ShaderNodeEmission")
+        nt.links.new(attr.outputs["Color"], emit.inputs["Color"])
+        nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+
+    n_setm.inputs['Material'].default_value = mat
+    links.new(gin.outputs['Geometry'], n_m2p.inputs['Mesh'])
+    links.new(n_m2p.outputs['Points'], n_setm.inputs['Geometry'])
+    links.new(n_setm.outputs['Geometry'], gout.inputs['Geometry'])
+    return obj
+
+# ---------- Mesh OBJ importer (with optional matched texture) ----------
+def import_mesh_obj(path, texture_img=None, dsm=False):
+    print('PATH:', path)
+    bpy.ops.wm.obj_import(filepath=path)
+    obj = first_mesh()
+    if not obj:
+        raise RuntimeError("OBJ import failed.")
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project()
-    bpy.ops.object.mode_set(mode='OBJECT')
+    obj.select_set(True)
+    bpy.ops.object.shade_smooth()
 
-from mathutils import Vector
+    if dsm:
+        return obj
 
-def setup_camera(target_obj, distance=75.0): # 50.0):
-    # Compute object's bounding box center in world coordinates
-    bbox_corners = [target_obj.matrix_world @ Vector(corner) for corner in target_obj.bound_box]
-    bbox_center = sum(bbox_corners, Vector()) / 8.0
-
-    # Place camera in front of the object (on +X axis), looking toward the center
-    cam_data = bpy.data.cameras.new("Camera")
-    cam_obj = bpy.data.objects.new("Camera", cam_data)
-    bpy.context.collection.objects.link(cam_obj)
-
-    cam_location = bbox_center + Vector((distance, 0, 0))  # in front of the object along X
-    cam_obj.location = cam_location
-
-    # Point the camera to look at the object's center
-    direction = bbox_center - cam_location
-    rot_quat = direction.to_track_quat('-Z', 'Y')
-    cam_obj.rotation_euler = rot_quat.to_euler()
-
-    # Set this camera as the active one
-    bpy.context.scene.camera = cam_obj
-
-def setup_render(path):
-    scene = bpy.context.scene
-    scene.render.image_settings.file_format = 'PNG'
-    scene.render.filepath = path
-    scene.render.resolution_x, scene.render.resolution_y = render_resolution
-    scene.render.film_transparent = False  # use True for transparent background
-    world = bpy.data.worlds["World"]
-    world.use_nodes = True
-    bg = world.node_tree.nodes["Background"]
-    bg.inputs[0].default_value = background_color
-
-    # Set render engine to 'CYCLES' or 'BLENDER_EEVEE'
-    bpy.context.scene.render.engine = 'CYCLES'  # or 'BLENDER_EEVEE'
-    if splats: 
-        bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
-    # Enable transparent background
-    bpy.context.scene.render.film_transparent = True  # For Cycles
-    bpy.context.scene.render.image_settings.color_mode = 'RGBA'  # Ensure alpha channel is saved
-    bpy.context.scene.render.image_settings.file_format = 'PNG'
-
-def add_light():
-    light_data = bpy.data.lights.new(name="Light", type='SUN')
-    light = bpy.data.objects.new(name="Light", object_data=light_data)
-    bpy.context.collection.objects.link(light)
-    light.location = (5, 5, 5)
-
-import bmesh
-def create_sphere_template(radius=0.14):
-    import bpy
-    import bmesh
-
-    mesh = bpy.data.meshes.new("TempSphere")
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=8, radius=radius)
-    bm.to_mesh(mesh)
-    bm.free()
-    return mesh
-def import_point_cloud_as_splats(ply_path):
-    bpy.ops.object.import_gaussian_splatting(filepath=ply_path)
-    bpy.context.object.rotation_euler[0] += math.radians(90)
-
-def create_textured_material(img_path, name):
-        if name in bpy.data.materials:
-            return bpy.data.materials[name]
-        img = bpy.data.images.load(img_path)
-        mat = bpy.data.materials.new(name)
-        mat.use_nodes = True
-        nodes = mat.node_tree.nodes
-        links = mat.node_tree.links
-
-        # Clear default nodes
-        for n in nodes: nodes.remove(n)
-
-        tex_coord = nodes.new("ShaderNodeTexCoord")
-        mapping = nodes.new("ShaderNodeMapping")
-        tex = nodes.new("ShaderNodeTexImage")
-        tex.image = img
+    if texture_img and os.path.exists(texture_img):
+        img = bpy.data.images.load(texture_img)
+        mat = bpy.data.materials.new("MeshTex"); mat.use_nodes = True
+        nodes, links = mat.node_tree.nodes, mat.node_tree.links
+        for n in list(nodes):
+            if n.type != 'OUTPUT_MATERIAL': nodes.remove(n)
+        out = nodes["Material Output"]
+        tex = nodes.new("ShaderNodeTexImage"); tex.image = img
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-        output = nodes.new("ShaderNodeOutputMaterial")
+        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+        obj.data.materials.clear(); obj.data.materials.append(mat)
+        # quick UV
+        bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.smart_project(); bpy.ops.object.mode_set(mode='OBJECT')
+    return obj
 
-        # Links
-        links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
-        links.new(mapping.outputs['Vector'], tex.inputs['Vector'])
-        links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
-        links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+def match_histogram_texture(source_img_file, target_img_file, output_file, blend_ratio=0.7):
+    """Apply histogram matching only to non-transparent pixels with blending"""
+    source_img = io.imread(source_img_file).astype(float) / 255.0
+    target_img = io.imread(target_img_file).astype(float) / 255.0
+    
+    # Handle RGBA vs RGB
+    if source_img.shape[2] == 4:  # RGBA
+        rgb_source = source_img[:, :, :3]
+        alpha_channel = source_img[:, :, 3]
+        # Create mask for non-transparent pixels
+        non_transparent_mask = alpha_channel > 0.01  # Small threshold for floating point
+    else:  # RGB
+        rgb_source = source_img
+        non_transparent_mask = np.ones(source_img.shape[:2], dtype=bool)  # All pixels
+    
+    if target_img.shape[2] == 4:
+        target_img = target_img[:, :, :3]  # Use only RGB from target
+    
+    # Apply histogram matching only to non-transparent pixels
+    matched_rgb = np.copy(rgb_source)
+    for c in range(3):
+        if np.any(non_transparent_mask):
+            # Extract non-transparent pixels for matching
+            source_channel = rgb_source[:, :, c][non_transparent_mask]
+            target_channel = target_img[:, :, c].ravel()
+            
+            # Match histograms
+            matched_channel = exposure.match_histograms(source_channel, target_channel)
+            
+            # Put matched values back into the image (only for non-transparent pixels)
+            matched_rgb[:, :, c][non_transparent_mask] = matched_channel
+    
+    # Blend original and matched (only for non-transparent pixels)
+    blended_rgb = np.copy(rgb_source)
+    blended_rgb[non_transparent_mask] = (
+        blend_ratio * rgb_source[non_transparent_mask] + 
+        (1.0 - blend_ratio) * matched_rgb[non_transparent_mask]
+    )
+    
+    # Reconstruct final image
+    if source_img.shape[2] == 4:  # Keep original alpha
+        final_img = np.dstack([blended_rgb, alpha_channel])
+    else:
+        final_img = blended_rgb
+    
+    # Clip and save
+    final_img = np.clip(final_img, 0.0, 1.0)
+    io.imsave(output_file, (final_img * 255).astype(np.uint8))
+    
+    print(f"[DEBUG] Histogram matched {np.sum(non_transparent_mask)} non-transparent pixels with {blend_ratio*100:.1f}% original blend")
 
-        return mat
+def match_point_colors(cols, ortho_png, blend_ratio=0.7, enable_histogram_matching=True):
+    """Match per-point RGB colors to the histogram of the orthophoto image with spatial sampling."""
+    if not enable_histogram_matching:
+        print("[DEBUG] Histogram matching disabled, returning original colors.")
+        return cols
+        
+    if not os.path.exists(ortho_png):
+        print("[DEBUG] No ortho found, skipping histogram match.")
+        return cols
 
-def import_point_cloud_as_spheres(ply_path, matched_texture, matched_texture_bark, radius=0.14): # 0.15
-    import bpy, bmesh, math
-    import numpy as np
-    from mathutils import Vector
-    import mathutils
+    try:
+        # Load orthophoto
+        ortho = io.imread(ortho_png)
+        if ortho.shape[-1] == 4:  # Drop alpha
+            ortho = ortho[..., :3]
+        elif ortho.ndim == 2:  # Grayscale -> RGB
+            ortho = np.stack([ortho]*3, axis=-1)
+        
+        # Simple histogram matching fallback (original method)
+        ortho = ortho.astype(np.float32) / 255.0
+        pts = np.array([c[:3] for c in cols], dtype=np.float32)
 
-    # Import PLY
-    bpy.ops.wm.ply_import(filepath=ply_path)
-    point_cloud = bpy.context.selected_objects[0]
-    point_cloud.name = "PointCloud"
+        matched = np.zeros_like(pts)
+        for ch in range(3):  # match each channel separately
+            matched[:, ch] = exposure.match_histograms(
+                pts[:, ch], ortho[..., ch].ravel()
+            )
 
-    # Extract and rotate points
-    mesh = point_cloud.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    verts = [v.co.copy() for v in bm.verts]
-    bm.free()
-    bpy.data.objects.remove(point_cloud, do_unlink=True)
+        matched = np.clip(matched, 0, 1)
+        
+        # Blend original and matched colors
+        blended = blend_ratio * pts + (1.0 - blend_ratio) * matched
+        blended = np.clip(blended, 0, 1)
+        
+        print(f"[DEBUG] Point colors mean before: {pts.mean(axis=0)}, after: {blended.mean(axis=0)} (blend ratio: {blend_ratio:.1f})")
+        return [(r, g, b, 1.0) for r, g, b in blended]
+    except Exception as e:
+        print(f"[DEBUG] Histogram match for PLY failed: {e}")
+        return cols
 
-    if len(verts) == 0:
-        print(f"[WARNING] No vertices found in: {ply_path}")
-        return
-
-
-    rot_matrix = mathutils.Euler((math.radians(90), 0, 0), 'XYZ').to_matrix().to_4x4()
-    for v in verts:
-        v_rot = rot_matrix @ v.to_4d()
-        v.x, v.y, v.z = v_rot.xyz
-
-    # Compute bounds
-    xs = [v.x for v in verts]
-    ys = [v.y for v in verts]
-    zs = [v.z for v in verts]
-    z_min, z_max = min(zs), max(zs)
-    max_radius = 0.5 * max(max(xs) - min(xs), max(ys) - min(ys))
-    max_trunk_height = z_min + (z_max - z_min) * 0.35
-
-    base_folder = 'C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//'
-    # foliage_mat = create_textured_material(os.path.join(base_folder, "textures/coniferous.jpg"), "FoliageMat")
-    foliage_mat = create_textured_material(matched_texture, "FoliageMat")
-    # bark_mat = create_textured_material(os.path.join(base_folder, "textures/bark_coniferous.jpg"), "BarkMat")
-    bark_mat = create_textured_material(matched_texture_bark, "BarkMat")
-
-    # Create template spheres
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=(0, 0, 0))
-    foliage_sphere = bpy.context.object
-    foliage_sphere.name = "FoliageSphere"
-    foliage_sphere.hide_render = True
-    foliage_sphere.hide_viewport = True
-    foliage_sphere.data.materials.append(foliage_mat)
-
-    bark_sphere = foliage_sphere.copy()
-    bark_sphere.data = foliage_sphere.data.copy()
-    bark_sphere.name = "BarkSphere"
-    bark_sphere.data.materials.clear()
-    bark_sphere.data.materials.append(bark_mat)
-    bpy.context.collection.objects.link(bark_sphere)
-
-
-
-
-    sphere_mesh = create_sphere_template(radius)
-    bm = bmesh.new()
-
-    for coord in verts:
-        r = math.sqrt(coord.x ** 2 + coord.y ** 2)
-        is_trunk = (coord.z < max_trunk_height) and (r < 0.2 * max_radius)
-        mat_index = 1 if is_trunk else 0
-
-        mat = bark_mat if is_trunk else foliage_mat
-
-        # Duplicate base sphere and move it
-        temp_bm = bmesh.new()
-        # bmesh.ops.create_uvsphere(temp_bm, u_segments=16, v_segments=8, diameter=radius)
-        bmesh.ops.create_uvsphere(temp_bm, u_segments=16, v_segments=8, radius=radius)
-        bmesh.ops.translate(temp_bm, verts=temp_bm.verts, vec=coord)
-
-        # Assign material index to all faces
-        for f in temp_bm.faces:
-            f.material_index = mat_index
-
-        # bm.from_mesh(temp_bm.to_mesh())
-        temp_mesh = bpy.data.meshes.new("Temp")
-        temp_bm.to_mesh(temp_mesh)
-        bm.from_mesh(temp_mesh)
-        bpy.data.meshes.remove(temp_mesh)  # optional cleanup
-        temp_bm.free()
-
-    # Output final mesh
-    mesh = bpy.data.meshes.new("MergedPointCloudMesh")
-    bm.to_mesh(mesh)
-    bm.free()
-
-    obj = bpy.data.objects.new("MergedPointCloudMesh", mesh)
-    obj.data.materials.append(foliage_mat)
-    obj.data.materials.append(bark_mat)
-    bpy.context.collection.objects.link(obj)
-
-    # # Create output collection
-    # sphere_collection = bpy.data.collections.new("PointSpheres")
-    # bpy.context.scene.collection.children.link(sphere_collection)
-
-    # # Place spheres with logic
-    # for i, coord in enumerate(verts):
-    #     r = math.sqrt(coord.x ** 2 + coord.y ** 2)
-    #     is_trunk = (coord.z < max_trunk_height) and (r < 0.2 * max_radius)
-    #     base = bark_sphere if is_trunk else foliage_sphere
-    #     inst = bpy.data.objects.new(f"pt_{i}", base.data)
-    #     inst.location = coord
-    #     sphere_collection.objects.link(inst)
-
-    # # Join all
-    # for obj in sphere_collection.objects:
-    #     obj.select_set(True)
-    # bpy.context.view_layer.objects.active = sphere_collection.objects[0]
-    # bpy.ops.object.join()
-    # bpy.context.object.name = "MergedPointCloudMesh"
-    # # bpy.context.object.rotation_euler[0] += math.radians(90)
-
-def import_point_cloud_as_spheres1(ply_path, radius=0.15): # 0.05
-    # Import the PLY file
-    bpy.ops.wm.ply_import(filepath=ply_path)
-
-    # Create a black material
-    black_mat = bpy.data.materials.get("BlackMaterial")
-    if black_mat is None:
-        black_mat = bpy.data.materials.new(name="BlackMaterial")
-        black_mat.use_nodes = True
-        nodes = black_mat.node_tree.nodes
-        bsdf = nodes.get("Principled BSDF")
-        if bsdf:
-            bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)  # RGBA black
-            bsdf.inputs["Roughness"].default_value = 1.0
-
-    point_cloud = bpy.context.selected_objects[0]
-    point_cloud.name = "PointCloud"
-
-    # Extract vertex positions
-    mesh = point_cloud.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    verts = [v.co.copy() for v in bm.verts]
-    bm.free()
-
-    if len(verts) == 0:
-        print(f"[WARNING] No vertices found in point cloud: {ply_path}")
-        bpy.data.objects.remove(point_cloud, do_unlink=True)
-        return
-
-    # Remove original point cloud object
-    bpy.data.objects.remove(point_cloud, do_unlink=True)
-
-    # Create sphere mesh for instancing
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=(0, 0, 0))
-    sphere = bpy.context.object
-    sphere.name = "PointSphere"
-    sphere.hide_render = True
-    sphere.hide_viewport = True
-
-    # Create a collection for the spheres
-    sphere_collection = bpy.data.collections.new("PointSpheres")
-    bpy.context.scene.collection.children.link(sphere_collection)
-
-    # Add sphere copies at each point location
-    for i, coord in enumerate(verts):
-        inst = bpy.data.objects.new(f"pt_{i}", sphere.data)
-        inst.location = coord
-        sphere_collection.objects.link(inst)
-
-        # Assign the black material
-        if len(inst.data.materials) == 0:
-            inst.data.materials.append(black_mat)
-        else:
-            inst.data.materials[0] = black_mat
-
-    # Remove the template sphere
-    bpy.data.objects.remove(sphere, do_unlink=True)
-
-    # Only proceed if spheres were added
-    if len(sphere_collection.objects) == 0:
-        print(f"[WARNING] No spheres created for point cloud: {ply_path}")
-        return
-
-    # Select and join all spheres
-    for obj in sphere_collection.objects:
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = sphere_collection.objects[0]
-    bpy.ops.object.join()
-
-    # Rotate 90 degrees around X
-    # bpy.context.object.rotation_euler[0] += math.radians(90)
-    bpy.context.object.name = "MergedPointCloudMesh"
-
-# ========== MAIN ==========
-tree_main_folder = "C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//TREE_MODELS"
-for folder in os.listdir(tree_main_folder):
-    if folder != model_name:
-        print(f"Skipping folder {folder}, not matching model name {model_name}")
+# ===================== MAIN =====================
+for fname in sorted(os.listdir(TREE_DIR)):
+    if not fname.lower().endswith((".ply", ".obj")):
         continue
-    tree_folder = os.path.join(tree_main_folder, folder)
-    tree_folder = os.path.join(tree_folder, 'pointclouds-landmarks')
-    model_name = folder
-    output_folder = f"outputs/{model_name}"
-    output_folder = os.path.join(base_folder, output_folder)
-    os.makedirs(output_folder, exist_ok=True)
 
-    for fname in os.listdir(tree_folder):
-        print(fname)
-        print('tree_folder', tree_folder)
-        if fname.endswith("pointclouds") or fname.endswith("mtl") or fname.endswith("export-ply"):
+    stem = os.path.splitext(fname)[0]
+    try:
+        tree_id = stem.split('_')[1]  # expects e.g., "tree_001_mesh"
+    except IndexError:
+        tree_id = ''.join(ch for ch in stem if ch.isdigit()).zfill(3)
+
+    out_png = os.path.join(OUT_DIR, f"{tree_id}.png")
+    if os.path.exists(out_png):
+        print(f"Skip {tree_id}: already rendered.")
+       # continue
+
+    # if '13' not in tree_id:
+    #     print(f"Skip {tree_id}: not in '6xx' series.")
+    #     continue
+
+    category = CATEGORY.get(tree_id, "deciduous")
+    leaf_tex = os.path.join(TEXTURE_DIR, "coniferous.jpg" if category == "coniferous" else "deciduous.jpg")
+    ortho_png = os.path.join(ORTHO_DIR, f"ortho_{tree_id}.png")
+
+    clear_scene()
+
+    path = os.path.join(TREE_DIR, fname)
+    ext  = os.path.splitext(path)[1].lower()
+
+    if ext == ".ply":
+        verts, cols = load_points_with_colors(path)
+        if not verts:
+            print(f"⚠️ No points in {fname}; skipping.")
             continue
-        # if not fname.endswith(".obj"):
-            # continue
+        # Compute bounding box size for point cloud
+        coords = np.array([v.to_tuple() for v in verts])
+        min_xyz = coords.min(axis=0)
+        max_xyz = coords.max(axis=0)
+        tree_size = np.linalg.norm(max_xyz - min_xyz)
+        point_radius = DEFAULT_POINT_RADIUS # max(tree_size * 0.005, 0.029)  # 1% of size, min fallback  * 0.0005 0.01
+        print('point radius:', point_radius)
+        # obj = create_gn_pointcloud(verts, cols, radius=point_radius, lit=True)
 
-        tree_id = os.path.splitext(fname)[0]
-        tree_id = os.path.splitext(fname)[0].split('_')[1] 
-        tree_path = os.path.join(tree_folder, fname)
-        ortho_path = os.path.join(ortho_folder, f"ortho_{tree_id}.png")
-        matched_texture = os.path.join(temp_folder, f"crown.jpg")
-        matched_texture_bark = os.path.join(temp_folder, f"{tree_id}-bark.jpg")
-        render_output = os.path.join(output_folder, f"{tree_id}.png")
-        if os.path.exists(render_output): #  or '50' in render_output:
-            print(f"Skipping {tree_id}, already rendered")
-            # continue
+        # Create point cloud without histogram matching (will be done on final image)
+        obj = create_gn_pointcloud(verts, cols, radius=point_radius, lit=True)
 
-        # target_ids = ['69'] # ['10', '11', '12', '13', '17', '18', '19', '21', '22', '24', '26', '28', '29', '30', '31', '32', '33', '34', '35', '36', '38', '55', '57', '61', '63', '67', '68', '69', '72']
-        # if not any(tid in render_output for tid in target_ids):
-        #     print(f"Skipping {tree_id}")
-        #     continue
-
-        # if '13' not in render_output:
-        #     print(f"Skipping {tree_id}, already rendered")
-        #     continue
-
-        # if not os.path.exists(ortho_path):
-        #     print(f"Skipping {tree_id}, ortho not found")
-        #     continue
-
-        tree_id = os.path.splitext(fname)[0].split('_')[1]  # gets '001' from 'tree_001_mesh.obj'
-        category = category_map.get(tree_id, "Deciduous").strip().lower()
-        if category == "coniferous":
-            template_texture = os.path.join(texture_folder, "coniferous.jpg")
-        else:
-            template_texture = os.path.join(texture_folder, "deciduous.jpg")
-
+    else:  # ".obj" mesh
+        # Try histogram matching leaf texture to the ortho (if present)
+        matched_tex = os.path.join(TEMP_DIR, f"{tree_id}_leaf_matched.jpg")
         try:
-            match_histogram_texture(template_texture, ortho_path, matched_texture)
+            if os.path.exists(ortho_png):
+                match_histograms(leaf_tex, ortho_png, matched_tex)
+                tex_to_use = matched_tex
+            else:
+                tex_to_use = leaf_tex
         except Exception as e:
-            print(f"Error matching histogram for {tree_id}: {e}")
+            print(f"Histogram match failed for {tree_id}: {e}")
+            tex_to_use = leaf_tex
+        obj = import_mesh_obj(path, texture_img=tex_to_use, dsm=dsm)
+        # Compute bounding box size for mesh
+        bbox = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+        min_xyz = np.min([v.to_tuple() for v in bbox], axis=0)
+        max_xyz = np.max([v.to_tuple() for v in bbox], axis=0)
+        tree_size = np.linalg.norm(np.array(max_xyz) - np.array(min_xyz))
+        point_radius = max(tree_size * 0.01, 0.002)  # 1% of size, min fallback
+        # If you want to use point_radius for mesh rendering, pass it to relevant functions here
 
-        if category == "coniferous":
-            template_texture_bark = os.path.join(texture_folder, "bark_coniferous.jpg")
-        else:
-            template_texture_bark = os.path.join(texture_folder, "bark_deciduous.jpg")
-        try:
-            # match_histogram_texture(template_texture_bark, ortho_path, matched_texture_bark)
-            matched_texture_bark = template_texture_bark
-        except Exception as e:
+    obj.location = (0, 0, 0)
+    obj.scale    = (1, 1, 1)
 
-            print(f"Error matching histogram for {tree_id}: {e}")
+    setup_camera_and_light(obj)
+    setup_render(out_png, size=RENDER_SIZE, transparent=True)
+    bpy.ops.render.render(write_still=True)
+    
+    # Apply histogram matching to final rendered image if orthophoto exists
+    if ENABLE_HISTOGRAM_MATCHING and os.path.exists(ortho_png):
+        temp_out = os.path.join(TEMP_DIR, f"{tree_id}_temp.png")
+        os.rename(out_png, temp_out)  # Move original render to temp location
+        match_histogram_texture(temp_out, ortho_png, out_png, blend_ratio=0.85)  # 90% matched, 10% original
+        os.remove(temp_out)  # Clean up temp file
+        print(f"✅ Applied histogram matching to final image")
+    
+    print(f"✅ Rendered {tree_id} -> {out_png}")
 
-        clear_scene()
-        print('matched_texture', matched_texture)
-        try:
-            import_mesh(tree_path, matched_texture, matched_texture_bark)
-
-            obj = [o for o in bpy.context.scene.objects if o.type == 'MESH'][0]
-            obj.location = (0, 0, 0)
-            obj.scale = (1, 1, 1)
-
-            bpy.context.view_layer.objects.active = obj
-            obj.select_set(True)
-            bpy.ops.object.shade_smooth()
-            if pointcloud == False:
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.normals_make_consistent(inside=False)
-                bpy.ops.object.mode_set(mode='OBJECT')
-
-            setup_camera(obj)
-            add_light()
-            setup_render(render_output)
-            bpy.ops.render.render(write_still=True)
-            print("Rendered", tree_id)
-        except Exception as e:
-            print(f"Error processing {tree_id}: {e}")
-            continue
-
-# "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe" --python gen_renderings.py
-
-
-
-
-
-
-
-
-
-# from PIL import Image
-# import os
-
-# # Set input and output folders
-# input_folder = 'C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//outputs/pictures'
-# output_folder = 'C://Users//mmddd//Documents//p2-tree-gen//landmarks_austria//outputs/pictures-resized'
-
-# # Create output folder if it doesn't exist
-# os.makedirs(output_folder, exist_ok=True)
-
-# # Loop over all image files
-# for filename in os.listdir(input_folder):
-#     if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
-#         img_path = os.path.join(input_folder, filename)
-#         img = Image.open(img_path)
-
-#         # Resize to 250x250
-#         img_resized = img.resize((250, 112)) # 250)) # , Image.ANTIALIAS)
-
-#         # Save resized image to output folder
-#         output_path = os.path.join(output_folder, filename)
-#         img_resized.save(output_path)
-
-# print("All images have been resized to 250x250 pixels.")
+# Example CLI:
+# "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe" --python gen_renderings_min.py

@@ -1,7 +1,7 @@
 import torch 
 import torch.nn.functional as F
 
-def visualize(network, vis, train_val, dsm_pc, query_points, gt_mesh, occupied_points, orthophoto, ground_truth, gt_occupancy, occupancy_pred, shadow_gt = None, shadow_pred = None):
+def visualize(network, vis, train_val, dsm_pc, query_points, gt_mesh, occupied_points, orthophoto, ground_truth, gt_occupancy, occupancy_pred, filenames, shadow_gt = None, shadow_pred = None):
     """
     Visualize the input data and the output predictions using Visdom."
     """
@@ -22,17 +22,18 @@ def visualize(network, vis, train_val, dsm_pc, query_points, gt_mesh, occupied_p
     ground_truth_mesh_np = ground_truth_mesh_np[:, [0, 2, 1]]
     vis.scatter(
         X=ground_truth_mesh_np,
-        win=f'{train_val}-GROUND_Mesh',
-        opts=dict(title=f'{train_val}-GROUND Mesh', markersize=2)
+        win=f'{train_val}-GROUND_Mesh', # -{filenames[0]}',
+        opts=dict(title=f'{train_val}-GROUND Mesh', markersize=2) # -{filenames[0]}
     )
 
-    # # Visdom scatter plot for DSM point cloud
-    # dsm_pc_np = dsm_pc[0].detach().cpu().numpy()  # Shape: (P, 3)
-    # vis.scatter(
-    #     X=dsm_pc_np,
-    #     win=f'{train_val}-DSM_PC',
-    #     opts=dict(title=f'{train_val}-DSM Point Cloud', markersize=2)
-    # )
+    # Visdom scatter plot for DSM point cloud
+    dsm_pc_np = dsm_pc[0]
+    dsm_pc_np = dsm_pc_np[:, [0, 2, 1]]
+    vis.scatter(
+        X=dsm_pc_np,
+        win=f'{train_val}-DSM_PC',
+        opts=dict(title=f'{train_val}-DSM Point Cloud', markersize=2)
+    )
 
     # # Visdom scatter plot for Query Points
     # query_points_np = query_points[0].detach().cpu().numpy()  # Shape: (Q, 3)
@@ -64,9 +65,15 @@ def visualize(network, vis, train_val, dsm_pc, query_points, gt_mesh, occupied_p
     # Visualize Orthophoto
     orthophoto_np = orthophoto[0].detach().cpu().numpy()
     orthophoto_np = (orthophoto_np - orthophoto_np.min()) / (orthophoto_np.max() - orthophoto_np.min() + 1e-8)
+    
+    # Include filename in title if available
+    orthophoto_title = "Orthophoto"
+    if filenames is not None and len(filenames) > 0:
+        orthophoto_title = f"Orthophoto - {filenames[0]}"
+    
     vis.image(orthophoto_np,
             win='Orthophoto',
-            opts=dict(title="Orthophoto", caption="Input Image"))
+            opts=dict(title=orthophoto_title, caption="Input Image"))
        
     if shadow_gt is not None and shadow_pred is not None: 
         # # if shadow_gt.shape[1] == 2 or shadow_gt.shape[1] == 3:            
