@@ -1,19 +1,8 @@
-# Network Tree Generation 
+# TreeON: Reconstructing 3D Tree Point Clouds from Orthophotos and Heightmaps
 
-A neural network-based system for generating 3D tree models with realistic rendering capabilities, including shadows, silhouettes, and color information.
+This repository contains the complete implementation of TreeON, a deep learning framework for generating 3D tree point clouds from Digital Surface Models (DSM) and orthophoto images. 
 
-## Current Experiments
-
-**Variable 3**: Normalized query points for improved model performance
-
-### Active Training Configurations
-1. **mixed_classes**: top_k_gt_occupancy (no threshold, uses top_k points for more coverage) + classes + no noise in model
-2. **mixed_noClasses**: Standard configuration without class loss
-3. **mixed_classes_thres**: Threshold-based + classes for controlled point selection
-
-## Research Links
-- [Tree Reconstruction Study](https://studies.cg.tuwien.ac.at/crowdsource?study=treesReconstruction) 
-
+Pretrained weights of our model are inside log/treeON_model_weights. To use the weights set: --env treeON_model_weights. 
 
 ## Features
 
@@ -42,16 +31,48 @@ network-tree-gen/
 └── log/                      # Training logs
 ```
 
-## Requirements
+## Key Features
 
-- Python 3.11+
-- PyTorch with CUDA support
-- Blender 4.3
-- Visdom
-- NumPy, scikit-image
-- CUDA-capable GPU
+### 1. Multi-Modal Input
+- **DSM (Digital Surface Model)**: 3D terrain height data
+- **Orthophoto**: High-resolution aerial imagery
+- **Combined Processing**: Leverages both geometric and visual information
 
+### 2. Advanced Rendering Pipeline
+The `gen_renderings.py` script provides:
+- **Multi-Model Support**: Processes 19 different model variants automatically
+- **Color Blending**: Intelligent mixing of point cloud colors with leaf textures
+- **Histogram Matching**: Matches colors to reference orthophotos
+- **Random Sampling**: Creates natural color variations
+- **Texture Integration**: Applies realistic leaf and bark textures
 
+### 3. Model Variants
+The system supports multiple model configurations:
+- **DSM-based**: `dsm_all`, `dsm_bce`, `dsm_shadow`, etc.
+- **Mixed**: `mixed_all`, `mixed_bce_shadow`, `mixed_silhouettes`, etc.
+- **Ortho-based**: `ortho_all`, `ortho_bce_shadow`, etc.
+
+### 4. Output Formats
+- **Point Clouds**: `.ply` files with color information
+- **Renderings**: High-quality PNG images (512x512)
+- **Metadata**: Color data and processing information in text format
+
+## Key Parameters
+
+- `--variable`: Use normalized query points
+- `--num_trees`: Total number of trees in the dataset
+- `--deciduous`: Include deciduous trees (true/false)
+- `--shadow`: Enable shadow generation
+- `--silhouettes`: Enable silhouette processing
+- `--colors`: Enable color information
+- `--model`: Model architecture variant (1-6)
+
+## Output
+
+Training outputs are saved in:
+- `log/`: Training logs and metrics
+- `val_npy/`: Validation results in NumPy format (for validation with training data)
+- `results/TREE_MODELS`: Generated point clouds and renderings
 
 ## Installation
 
@@ -120,50 +141,6 @@ If you encounter issues, try:
 CUDA_HOME=/usr/local/cuda-10.0 python setup.py build_ext --inplace
 ```
 
-
-## Key Features
-
-### 1. Multi-Modal Input
-- **DSM (Digital Surface Model)**: 3D terrain height data
-- **Orthophoto**: High-resolution aerial imagery
-- **Combined Processing**: Leverages both geometric and visual information
-
-### 2. Advanced Rendering Pipeline
-The `gen_renderings.py` script provides:
-- **Multi-Model Support**: Processes 19 different model variants automatically
-- **Color Blending**: Intelligent mixing of point cloud colors with leaf textures
-- **Histogram Matching**: Matches colors to reference orthophotos
-- **Random Sampling**: Creates natural color variations
-- **Texture Integration**: Applies realistic leaf and bark textures
-
-### 3. Model Variants
-The system supports multiple model configurations:
-- **DSM-based**: `dsm_all`, `dsm_bce`, `dsm_shadow`, etc.
-- **Mixed**: `mixed_all`, `mixed_bce_shadow`, `mixed_silhouettes`, etc.
-- **Ortho-based**: `ortho_all`, `ortho_bce_shadow`, etc.
-
-### 4. Output Formats
-- **Point Clouds**: `.ply` files with color information
-- **Renderings**: High-quality PNG images (512x512)
-- **Metadata**: Color data and processing information in text format
-
-## Key Parameters
-
-- `--variable`: Use normalized query points
-- `--num_trees`: Total number of trees in the dataset
-- `--deciduous`: Include deciduous trees (true/false)
-- `--shadow`: Enable shadow generation
-- `--silhouettes`: Enable silhouette processing
-- `--colors`: Enable color information
-- `--model`: Model architecture variant (1-6)
-
-## Output
-
-Training outputs are saved in:
-- `log/`: Training logs and metrics
-- `val_npy/`: Validation results in NumPy format (for validation with training data)
-- `results/TREE_MODELS`: Generated point clouds and renderings
-
 ## Usage
 
 ### Starting Visdom Server
@@ -187,7 +164,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
     --top_k 2500 \
     --deciduous true \
     --thres 25 \
-    --env mixed_colors_orthoEffect \
+    --env treeON_model_weights \
     --bce true \
     --shadow true \
     --silhouettes true \
@@ -219,7 +196,7 @@ Run validation pipeline:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py \
-    --env test3_norm01_colorsrgb \
+    --env treeON_model_weights \
     --num_query_points 85000 \
     --top_k 4000 \
     --num_points 4000 \
@@ -228,7 +205,7 @@ CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py \
     --variable 2 \
     --top_k_max 1200
 
-CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py --env mixed_noClasses_thres --num_query_points 85000 --top_k 4000 --num_points 4000 --model 1 --deciduous true --variable 3 --top_k_max 12000
+CUDA_VISIBLE_DEVICES=0 python validation/validation_pipeline_landmarks.py --env treeON_model_weights --num_query_points 85000 --top_k 4000 --num_points 4000 --model 1 --deciduous true --variable 3 --top_k_max 12000
 ```
 
 ## Dataset
