@@ -1,8 +1,25 @@
 # TreeON: Reconstructing 3D Tree Point Clouds from Orthophotos and Heightmaps
 
-This repository contains the complete implementation of TreeON, a deep learning framework for generating 3D tree point clouds from Digital Surface Models (DSM) and orthophoto images. 
+This repository contains the complete implementation of **TreeON**, a deep learning framework for reconstructing 3D tree point clouds from Digital Surface Models (DSMs) and orthophoto imagery.
 
-Pretrained weights of our model can be found in [Google Drive](https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing). Place the "treeON_model_weights" folder inside the folder log/. To use the weights set: --env treeON_model_weights. 
+## Pretrained Model Weights
+
+Pretrained model weights are available for download from Google Drive:
+
+https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing
+
+After downloading, place the folder `treeON_model_weights` inside the `log/` directory:
+
+TreeON/
+├── log/
+│ └── treeON_model_weights/
+
+
+To run the model using the pretrained weights, set the following argument:
+
+```bash
+--env treeON_model_weights
+```
 
 ## Features
 
