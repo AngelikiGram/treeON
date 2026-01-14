@@ -238,6 +238,12 @@ The project uses Austrian landmarks dataset located in `landmarks_austria/` dire
 - `DSM/`: Digital Surface Models
 - `ORTHOPHOTOS/`: Orthographic images
 
+[![Database](https://img.icons8.com/fluency/48/000000/database.png) **Synthetic Trees Dataset (GeoTree3D)**](https://doi.org/10.48436/cnw9n-zxw07)
+
+<br>
+
+[![DOI](https://researchdata.tuwien.ac.at/badge/DOI/10.48436/cnw9n-zxw07.svg)](https://doi.org/10.48436/cnw9n-zxw07)
+
 ## Requirements
 
 - **Python 3.8+**
