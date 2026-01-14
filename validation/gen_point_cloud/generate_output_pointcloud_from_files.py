@@ -237,7 +237,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(args)
 
-# CUDA_VISIBLE_DEVICES=1 python validation/gen_point_cloud/generate_output_pointcloud_from_files.py --dsm_mat france_data/DSM_MAT/dsm_15.mat --ortho_img france_data/ORTHOPHOTOS/ortho_15.png --output_root results/landmarks/FRANCE --model_path log/mixed_all_450/network.pth --env test_env
+# CUDA_VISIBLE_DEVICES=1 python validation/gen_point_cloud/generate_output_pointcloud_from_files.py --dsm_mat france_data/DSM_MAT/dsm_15.mat --ortho_img france_data/ORTHOPHOTOS/ortho_15.png --output_root results/landmarks/FRANCE --model_path log/treeON_model_weights/network.pth --env test_env
 
 
 # mkdir results/landmarks/FRANCE
