@@ -2,7 +2,7 @@
 
 This repository contains the complete implementation of TreeON, a deep learning framework for generating 3D tree point clouds from Digital Surface Models (DSM) and orthophoto images. 
 
-Pretrained weights of our model can be found in . Place the "treeON_model_weights" folder inside the folder log/. To use the weights set: --env treeON_model_weights. 
+Pretrained weights of our model can be found in [Google Drive](https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing). Place the "treeON_model_weights" folder inside the folder log/. To use the weights set: --env treeON_model_weights. 
 
 ## Features
 
