@@ -6,14 +6,17 @@ This repository contains the complete implementation of **TreeON**, a deep learn
 
 Pretrained model weights are available for download from Google Drive:
 
-https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing
+[Download pretrained model weights (Google Drive)](https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing)
+
+After downloading, place the extracted folder at: `log/treeON_model_weights/`
 
 After downloading, place the folder `treeON_model_weights` inside the `log/` directory:
 
+```
 TreeON/
 ├── log/
-│ └── treeON_model_weights/
-
+│   └── treeON_model_weights/
+```
 
 To run the model using the pretrained weights, set the following argument:
 
