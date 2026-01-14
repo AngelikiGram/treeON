@@ -1,0 +1,894 @@
+import torch
+from torch.utils.data import DataLoader
+import sys
+import os
+import argparse
+import numpy as np
+import trimesh
+import visdom
+from color_metrics import srgb_to_lab_numpy_uint8, deltaE00_numpy, ensure_uint8_srgb # compute_delta_e_cie2000_batch
+from sklearn.neighbors import NearestNeighbors
+
+sys.path.append('./auxiliary/')
+from query_points_gen import *
+from occupancy_compute import extract_top_k_occupied_points, compute_occupancy, extract_threshold_occupied_points, compute_occupancy_top_k
+from loss_functions import reconstruction_loss
+
+sys.path.append('./auxiliary/dataset')
+from dataset_test import TreeDataset
+
+sys.path.append('./auxiliary/models')
+
+# def save_points_as_ply(points, filename):
+#     """Saves points as a PLY file."""
+#     if isinstance(points, torch.Tensor):
+#         points = points.cpu().numpy()
+#     cloud = trimesh.PointCloud(points)
+#     cloud.export(filename)
+
+
+def save_points_as_ply(points, filename, colors=None):
+    """
+    Saves the given points (tensor or list of tensors) as a PLY file.
+    points: (N, 3) tensor/ndarray or list of (Ni, 3) tensors/ndarrays.
+    colors: (N, 3) tensor/ndarray or list of (Ni, 3) tensors/ndarrays, values in [0, 255] or [0, 1].
+    filename: output path (.ply).
+    """
+    # Handle list of tensors/arrays
+    if isinstance(points, (list, tuple)):
+        pts_list = []
+        for p in points:
+            if isinstance(p, torch.Tensor):
+                pts_list.append(p.cpu().numpy())
+            else:
+                pts_list.append(np.asarray(p))
+        points = np.concatenate(pts_list, axis=0)
+    elif isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    else:
+        points = np.asarray(points)
+
+    N = points.shape[0]
+
+    # Handle colors
+    if colors is not None:
+        if isinstance(colors, (list, tuple)):
+            # Check if this is a single RGB tuple like (100, 100, 100)
+            if len(colors) == 3 and all(isinstance(c, (int, float)) for c in colors):
+                # Single RGB color - replicate for all points
+                colors = np.tile(np.array(colors), (N, 1))
+            else:
+                # List of color arrays - concatenate them
+                col_list = []
+                for c in colors:
+                    if isinstance(c, torch.Tensor):
+                        col_list.append(c.cpu().numpy())
+                    else:
+                        col_list.append(np.asarray(c))
+                colors = np.concatenate(col_list, axis=0)
+        elif isinstance(colors, torch.Tensor):
+            colors = colors.cpu().numpy()
+        else:
+            colors = np.asarray(colors)
+        if colors.shape[1] > 3:
+            colors = colors[:, :3]
+        if colors.max() <= 1.0:
+            colors = (colors * 255).astype(np.uint8)
+        else:
+            colors = colors.astype(np.uint8)
+        # Ensure colors array matches number of points
+        if colors.shape[0] < N:
+            # Pad colors with zeros if too short
+            pad = np.zeros((N - colors.shape[0], 3), dtype=np.uint8)
+            colors = np.concatenate([colors, pad], axis=0)
+        elif colors.shape[0] > N:
+            # Truncate colors if too long
+            colors = colors[:N]
+        # Write manual ASCII PLY with colors
+        with open(filename, 'w') as f:
+            f.write('ply\n')
+            f.write('format ascii 1.0\n')
+            f.write('element vertex %d\n' % N)
+            f.write('property float x\n')
+            f.write('property float y\n')
+            f.write('property float z\n')
+            f.write('property uchar red\n')
+            f.write('property uchar green\n')
+            f.write('property uchar blue\n')
+            f.write('end_header\n')
+            for i in range(N):
+                x, y, z = points[i]
+                r, g, b = colors[i]
+                f.write(f'{x:.8f} {y:.8f} {z:.8f} {int(r)} {int(g)} {int(b)}\n')
+    else:
+        # Write manual ASCII PLY without colors
+        with open(filename, 'w') as f:
+            f.write('ply\n')
+            f.write('format ascii 1.0\n')
+            f.write('element vertex %d\n' % N)
+            f.write('property float x\n')
+            f.write('property float y\n')
+            f.write('property float z\n')
+            f.write('end_header\n')
+            for i in range(N):
+                x, y, z = points[i]
+                f.write(f'{x:.8f} {y:.8f} {z:.8f}\n')
+def save_points_as_ply1(points, filename, colors=None):
+    """
+    Saves the given points (tensor) as a PLY file.
+    points: (N, 3) tensor.
+    colors: (N, 3) tensor or ndarray, values in [0, 255] or [0, 1].
+    filename: output path (.ply).
+    """
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    N = points.shape[0]
+    # Prepare colors
+    if colors is not None:
+        if isinstance(colors, torch.Tensor):
+            colors = colors.cpu().numpy()
+        if colors.shape[1] > 3:
+            colors = colors[:, :3]
+        if colors.max() <= 1.0:
+            colors = (colors * 255).astype(np.uint8)
+        else:
+            colors = colors.astype(np.uint8)
+        # Write manual ASCII PLY with colors
+        with open(filename, 'w') as f:
+            f.write('ply\n')
+            f.write('format ascii 1.0\n')
+            f.write('element vertex %d\n' % N)
+            f.write('property float x\n')
+            f.write('property float y\n')
+            f.write('property float z\n')
+            f.write('property uchar red\n')
+            f.write('property uchar green\n')
+            f.write('property uchar blue\n')
+            f.write('end_header\n')
+            for i in range(N):
+                x, y, z = points[i]
+                r, g, b = colors[i]
+                f.write(f'{x:.8f} {y:.8f} {z:.8f} {int(r)} {int(g)} {int(b)}\n')
+    else:
+        # Write manual ASCII PLY without colors
+        with open(filename, 'w') as f:
+            f.write('ply\n')
+            f.write('format ascii 1.0\n')
+            f.write('element vertex %d\n' % N)
+            f.write('property float x\n')
+            f.write('property float y\n')
+            f.write('property float z\n')
+            f.write('end_header\n')
+            for i in range(N):
+                x, y, z = points[i]
+                f.write(f'{x:.8f} {y:.8f} {z:.8f}\n')
+
+def collate_fn(batch):
+    """Custom collate function for DataLoader."""
+    imgs, points, initial_vertices, index_views, filenames, center_dsm, scale_dsm, gt_colors = zip(*batch)
+
+    imgs = torch.stack([torch.tensor(img, dtype=torch.float32) if isinstance(img, np.ndarray) else img for img in imgs])
+    points = torch.stack([torch.tensor(p, dtype=torch.float32) if isinstance(p, np.ndarray) else p for p in points])
+    initial_vertices = torch.stack([torch.tensor(v, dtype=torch.float32) if isinstance(v, np.ndarray) else v for v in initial_vertices])
+    index_views = torch.tensor(index_views)
+    
+    center_dsm = torch.stack([
+        torch.tensor(c, dtype=torch.float32) if not torch.is_tensor(c) else c
+        for c in center_dsm
+    ])
+    scale_dsm = torch.stack([
+        torch.tensor([s], dtype=torch.float32) if not torch.is_tensor(s) else s
+        for s in scale_dsm
+    ]).squeeze(1)
+
+    gt_colors = torch.stack([
+        torch.tensor(c, dtype=torch.float32) if not torch.is_tensor(c) else c
+        for c in gt_colors
+    ])
+
+    return imgs, points, initial_vertices, index_views, list(filenames), center_dsm, scale_dsm, gt_colors
+
+def compute_chamfer(pred_points, gt_points):
+    """Computes Chamfer RMSE (in meters) between predicted and ground truth point clouds."""
+    cd_squared = reconstruction_loss(pred_points, gt_points)
+    cd_rmse = torch.sqrt(cd_squared)
+    return cd_rmse
+
+def pad_or_trim_tensor(tensor, target_num_points):
+    """Pad or trim tensor to target number of points."""
+    N = tensor.shape[0]
+    if N == 0:
+        return torch.zeros((target_num_points, tensor.shape[1]), dtype=tensor.dtype, device=tensor.device)
+    if N == target_num_points:
+        return tensor
+    elif N > target_num_points:
+        return tensor[:target_num_points]
+    else:  # Pad
+        pad_size = target_num_points - N
+        pad = tensor[torch.randint(0, N, (pad_size,), device=tensor.device)]
+        return torch.cat([tensor, pad], dim=0)
+
+def compute_tree_height(points):
+    """Compute tree height assuming Y-axis is vertical."""
+    return points[:, 1].max() - points[:, 1].min()
+
+def compute_mean_chamfer(chamfers):
+    """Compute mean RMSE from squared chamfer distances."""
+    chamfers_tensor = torch.tensor(chamfers)
+    rmse_per_pair = torch.sqrt(chamfers_tensor)
+    return rmse_per_pair.mean().item()
+
+def compute_f1_score(pred_points, gt_points, threshold=0.01):
+    """
+    Compute F1 score between predicted and ground truth point clouds.
+    
+    Args:
+        pred_points: Predicted point cloud (B, N, 3)
+        gt_points: Ground truth point cloud (B, M, 3)
+        threshold: Distance threshold for considering a match
+    
+    Returns:
+        f1_score: F1 score
+        precision: Precision score
+        recall: Recall score
+    """
+    from sklearn.neighbors import NearestNeighbors
+    
+    if isinstance(pred_points, torch.Tensor):
+        pred_points = pred_points.cpu().numpy()
+    if isinstance(gt_points, torch.Tensor):
+        gt_points = gt_points.cpu().numpy()
+    
+    # Flatten if batched
+    if pred_points.ndim == 3:
+        pred_points = pred_points.reshape(-1, 3)
+    if gt_points.ndim == 3:
+        gt_points = gt_points.reshape(-1, 3)
+    
+    # Build KNN for GT points
+    nbrs_gt = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(gt_points)
+    distances_pred_to_gt, _ = nbrs_gt.kneighbors(pred_points)
+    
+    # Build KNN for predicted points
+    nbrs_pred = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(pred_points)
+    distances_gt_to_pred, _ = nbrs_pred.kneighbors(gt_points)
+    
+    # Precision: fraction of predicted points within threshold of GT
+    precision = np.mean(distances_pred_to_gt.flatten() < threshold)
+    
+    # Recall: fraction of GT points within threshold of predicted
+    recall = np.mean(distances_gt_to_pred.flatten() < threshold)
+    
+    # F1 score
+    if precision + recall == 0:
+        f1_score = 0.0
+    else:
+        f1_score = 2 * (precision * recall) / (precision + recall)
+    
+    return f1_score, precision, recall
+
+def compute_coverage_mmd_cov(all_pred_points, all_gt_points, k=5):
+    """
+    Compute Coverage, Maximum Mean Discrepancy (MMD), and COV metrics.
+    
+    Args:
+        all_pred_points: List of predicted point clouds
+        all_gt_points: List of ground truth point clouds
+        k: Number of nearest neighbors for coverage computation
+    
+    Returns:
+        coverage: Coverage score (higher is better)
+        mmd: Maximum Mean Discrepancy (lower is better)
+        cov: COV score (higher is better, measures diversity)
+    """
+    from sklearn.neighbors import NearestNeighbors
+    
+    # Convert to numpy arrays
+    pred_features = []
+    gt_features = []
+    
+    for pred, gt in zip(all_pred_points, all_gt_points):
+        if isinstance(pred, torch.Tensor):
+            pred = pred.cpu().numpy()
+        if isinstance(gt, torch.Tensor):
+            gt = gt.cpu().numpy()
+        
+        # Use mean coordinates as features (simple feature extraction)
+        pred_feat = np.array([pred.mean(axis=0).flatten()])  # Shape: (1, 3)
+        gt_feat = np.array([gt.mean(axis=0).flatten()])      # Shape: (1, 3)
+        
+        pred_features.append(pred_feat.flatten())
+        gt_features.append(gt_feat.flatten())
+    
+    pred_features = np.array(pred_features)  # Shape: (N, 3)
+    gt_features = np.array(gt_features)      # Shape: (N, 3)
+    
+    # Coverage: For each GT sample, check if there's a predicted sample within k-NN
+    nbrs_pred = NearestNeighbors(n_neighbors=min(k, len(pred_features)), algorithm='kd_tree').fit(pred_features)
+    distances_gt_to_pred, _ = nbrs_pred.kneighbors(gt_features)
+    
+    # Coverage is the fraction of GT samples that have a close predicted sample
+    coverage_threshold = np.percentile(distances_gt_to_pred.min(axis=1), 50)  # Median distance as threshold
+    coverage = np.mean(distances_gt_to_pred.min(axis=1) < coverage_threshold)
+    
+    # MMD: Average minimum distance from predicted to GT
+    nbrs_gt = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(gt_features)
+    distances_pred_to_gt, _ = nbrs_gt.kneighbors(pred_features)
+    mmd = np.mean(distances_pred_to_gt.flatten())
+    
+    # COV: Diversity measure - average pairwise distance in predicted set
+    if len(pred_features) > 1:
+        pairwise_distances = []
+        for i in range(len(pred_features)):
+            for j in range(i+1, len(pred_features)):
+                dist = np.linalg.norm(pred_features[i] - pred_features[j])
+                pairwise_distances.append(dist)
+        cov = np.mean(pairwise_distances) if pairwise_distances else 0.0
+    else:
+        cov = 0.0
+    
+    return coverage, mmd, cov
+
+def print_evaluation_results(results):
+    """Print concise evaluation results for reporting."""
+    # print("\n" + "="*80)
+    # print("TREE RECONSTRUCTION EVALUATION RESULTS 🌲")
+    # print("="*80)
+    
+    # Geometric Accuracy
+    print(f"\nGEOMETRIC ACCURACY:")
+    print(f"{'Chamfer Distance (RMSE):':<30} {results['chamfer_rmse']:.4f} meters")
+    print(f"{'Normalized Chamfer Distance:':<30} {results['normalized_chamfer']:.4f}")
+    
+    # Completeness & Precision
+    print(f"COMPLETENESS & PRECISION:")
+    print(f"{'F1 Score:':<30} {results['f1_score']:.4f}")
+    
+    # Diversity
+    print(f"DIVERSITY:")
+    print(f"{'Variance Score (COV):':<30} {results['variance_score']:.2f}%")
+    
+    print("\n" + "="*80)
+    print("EVALUATION COMPLETE")
+    print("="*80)
+
+def denormalize_from_unit_cube(normalized_points, center, scale):
+    """Reverts normalized points in [0, 1]^3 back to original coordinates."""
+    denormalized = []
+    for i, points in enumerate(normalized_points):
+        device = points.device
+        c = center[i].to(device)
+        s = scale[i].to(device)
+        pts = (points - 0.5) * s + c
+        denormalized.append(pts)
+    return denormalized
+
+def to_uint8_srgb(colors):
+    """
+    Ensure colors are sRGB-encoded uint8.
+    Accepts Nx3 in [0,1] or [0,255] or torch.Tensor.
+    Applies gamma encode (linear -> sRGB) only if values appear in [0,1].
+    """
+    if isinstance(colors, torch.Tensor):
+        colors = colors.detach().cpu().numpy()
+
+    colors = colors.astype(np.float32, copy=False)
+    if colors.max() <= 1.0:  # likely linear [0,1]
+        colors = np.clip(colors, 0.0, 1.0)
+        # linear -> sRGB gamma encode
+        colors = np.power(colors, 1.0 / 2.2)
+        colors = np.round(colors * 255.0)
+    else:
+        colors = np.clip(colors, 0.0, 255.0)  # already 0..255
+    return colors.astype(np.uint8)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dsm_dir', type=str, default='./validation/landmarks_austria/DSM/')
+    parser.add_argument('--ortho_dir', type=str, default='./validation/landmarks_austria/ORTHOPHOTOS/')
+    parser.add_argument('--env', type=str, required=True)
+    parser.add_argument('--log_dir', type=str, default='log_p2_final', help='Log directory name (e.g., log_p2_final, log_p2, etc.)')
+    parser.add_argument('--num_query_points', type=int, default=10000)
+    parser.add_argument('--top_k', type=int, default=2500)
+    parser.add_argument('--num_points', type=int, default=2500)
+    parser.add_argument('--num_trees', type=int, default=100)
+    parser.add_argument('--deciduous', type=bool, default=False) 
+    parser.add_argument('--variable', type=str, default='0')
+    parser.add_argument('--num_trees_total', type=int, default=100)
+    parser.add_argument('--model', type=str, default='1')
+    parser.add_argument('--dsm_convex_hull', type=bool, default=False)
+    parser.add_argument('--no_norm_orthophoto', type=bool, default=False)
+    parser.add_argument('--top_k_max', type=int, default=2500)
+    parser.add_argument('--top_k_gt_occupancy', type=bool, default=False, help='Use top-k occupancy for GT points')
+    parser.add_argument('--many_trees', type=bool, default=False, help='Use many trees dataset')
+    args = parser.parse_args()
+
+    # Initialize Visdom
+    vis = visdom.Visdom(port=8099, env='val_' + args.env)
+    vis.close(win=None)
+
+    # Import model based on model type
+    if args.model == '1': # normal
+        from model_normal_categories import TreeReconstructionNet
+    elif args.model == '2': # DSM 
+        from model_dsm import TreeReconstructionNet
+    elif args.model == '3': # ortho
+        from model_ortho import TreeReconstructionNet
+    elif args.model == '4':
+        from model_normal_with_noise import TreeReconstructionNet ## for variety 
+    elif args.model == '10': # dsm with noise
+        from model_normal_categories_noRefinement import TreeReconstructionNet
+    elif args.model == '11': # ortho + dsm + noise
+        from model_colors_old import TreeReconstructionNet
+    else: # colors
+        from model_colors import TreeReconstructionNet
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Setup dataset - Always use the same validation dataset in the same order for consistency
+    os.makedirs("val_npy", exist_ok=True)
+    filename = f"val_npy/fixed_trees_ordered.npy"
+    
+    # Check if val_npy directory has saved validation dataset with consistent ordering
+    if os.path.exists(filename) and os.path.getsize(filename) > 0:
+        print(f"✅ Loading consistent validation dataset from {filename}")
+        try:
+            ids = np.load(filename, allow_pickle=True)
+            print(f"📊 Loaded {len(ids)} fixed tree IDs in preserved order for consistent validation")
+            print(f"🔒 Tree[0] = {ids[0] if len(ids) > 0 else 'N/A'}, Tree[1] = {ids[1] if len(ids) > 1 else 'N/A'}, ...")
+            
+            # Create dataset with the same fixed IDs in the same order used in previous validations
+            dataset = TreeDataset(
+                npoints=args.num_points, 
+                train=False, 
+                num_trees=len(ids),  # Use exactly the saved number of trees
+                # deciduous=args.deciduous, 
+                fixed_ids=ids,
+                many_trees=args.many_trees
+            )
+            print(f"✅ Successfully created consistent validation dataset: {len(dataset)} samples")
+            print(f"🎯 Order guaranteed: dataset[0] will always be the same tree across all validation runs")
+            
+            # Debug: Verify the loaded dataset matches saved IDs
+            if hasattr(dataset, 'get_filenames'):
+                actual_filenames = dataset.get_filenames()
+            elif hasattr(dataset, 'datapath'):
+                actual_filenames = [os.path.basename(path[0]).replace('.png', '') for path, _, _ in dataset.datapath]
+            else:
+                actual_filenames = ["debug_unavailable"]
+            
+            print(f"🔍 CONSISTENCY CHECK:")
+            print(f"   Saved IDs (first 5): {ids[:5] if len(ids) >= 5 else ids}")
+            print(f"   Actual dataset (first 5): {actual_filenames[:5] if len(actual_filenames) >= 5 else actual_filenames}")
+            
+            # Check if they match
+            ids_match = all(saved_id == actual_id for saved_id, actual_id in zip(ids[:min(len(ids), len(actual_filenames))], actual_filenames[:min(len(ids), len(actual_filenames))]))
+            if ids_match:
+                print(f"✅ VALIDATION CONSISTENCY VERIFIED: Dataset matches saved IDs")
+            else:
+                print(f"❌ WARNING: Dataset does not match saved IDs! This will cause inconsistent validation results.")
+                print(f"❌ Creating new fixed dataset to ensure consistency...")
+                dataset = None  # Force recreation
+            
+        except Exception as e:
+            print(f"❌ Error loading saved validation dataset: {e}")
+            print("🔄 Creating new validation dataset (this will be saved for future consistency)...")
+            dataset = None  # Will be created in the else block
+    else:
+        print(f"📝 No ordered validation dataset found in val_npy/ - creating new one...")
+        dataset = None
+    
+    # Create new validation dataset if loading failed or no saved dataset exists
+    if dataset is None:
+        print("🆕 Creating new validation dataset with deterministic ordering...")
+        
+        # Set random seed for reproducible dataset creation - CRITICAL for consistency
+        np.random.seed(42)  # Fixed seed for reproducible tree selection
+        torch.manual_seed(42)  # Also set torch seed
+        
+        print(f"🎲 Using fixed random seed (42) to ensure reproducible tree selection")
+        
+        dataset = TreeDataset(
+            npoints=args.num_points, 
+            train=False, 
+            num_trees=args.num_trees_total, 
+            # deciduous=args.deciduous,
+            many_trees=args.many_trees
+        )
+        
+        # Save the tree IDs in their exact order for future consistent validation runs
+        if hasattr(dataset, 'get_filenames'):
+            selected_tree_ids = dataset.get_filenames()
+        else:
+            # Fallback: extract IDs from dataset paths in their order
+            selected_tree_ids = [os.path.basename(path[0]).replace('.png', '') for path, _, _ in dataset.datapath]
+        
+        # Ensure consistent ordering by sorting (optional - remove if you want random but fixed order)
+        # selected_tree_ids = sorted(selected_tree_ids)  # Uncomment for alphabetical order
+        
+        np.save(filename, selected_tree_ids)
+        print(f"💾 Saved {len(selected_tree_ids)} tree IDs to {filename} in preserved order")
+        print(f"🔒 Order locked: Tree[0] = {selected_tree_ids[0] if len(selected_tree_ids) > 0 else 'N/A'}")
+        print(f"🎯 This exact order will be maintained in all future validation runs")
+        
+        # Immediate verification that saved dataset matches what we expect
+        if hasattr(dataset, 'get_filenames'):
+            verify_filenames = dataset.get_filenames()
+        elif hasattr(dataset, 'datapath'):
+            verify_filenames = [os.path.basename(path[0]).replace('.png', '') for path, _, _ in dataset.datapath]
+        else:
+            verify_filenames = ["verify_unavailable"]
+        
+        print(f"🔍 IMMEDIATE VERIFICATION:")
+        print(f"   Just saved: {selected_tree_ids[:3] if len(selected_tree_ids) >= 3 else selected_tree_ids}")
+        print(f"   Dataset has: {verify_filenames[:3] if len(verify_filenames) >= 3 else verify_filenames}")
+        
+        if selected_tree_ids == verify_filenames:
+            print(f"✅ PERFECT MATCH: Saved and dataset orders are identical")
+        else:
+            print(f"⚠️  ORDER MISMATCH DETECTED: This may cause validation inconsistency")
+    
+    print(f"Final dataset size: {len(dataset)} samples")
+    print("Using 100% of selected trees as test data (no train/val split in validation)")
+    
+    # Verify order consistency for debugging
+    if hasattr(dataset, 'get_filenames'):
+        current_order = dataset.get_filenames()
+    elif hasattr(dataset, 'datapath'):
+        current_order = [os.path.basename(path[0]).replace('.png', '') for path, _, _ in dataset.datapath]
+    else:
+        current_order = ["order_check_unavailable"]
+    
+    print(f"🔍 Validation order verification: First 3 trees = {current_order[:3] if len(current_order) >= 3 else current_order}")
+    
+    dataloader = DataLoader(dataset, batch_size=16, num_workers=6, shuffle=False, collate_fn=collate_fn)
+    
+    # Load model
+    model = TreeReconstructionNet(num_points=args.num_points, num_species=14).to(device)
+    checkpoint = torch.load(f"./{args.log_dir}/{args.env}/network.pth")
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+
+    with torch.no_grad():
+        all_gt_points = []
+        all_pred_points = []
+        all_dsm_points = []
+        all_filenames = []
+        closest_matches = []
+
+        all_gt_meshes = []
+
+        all_pred_colors = []
+        all_topk_indices = []
+
+        all_gt_colors = []
+        
+        # Store normalized (original) tensors for F1 score computation
+        all_pred_tensors_original = []
+        all_gt_tensors_original = []
+
+        for batch_idx, (orthophoto, gt_mesh, dsm_points, index_views, filenames, center_dsm, scale_dsm, gt_colors) in enumerate(dataloader):
+            orthophoto, gt_mesh, dsm_points = orthophoto.to(device), gt_mesh.to(device), dsm_points.to(device)
+            B = dsm_points.shape[0]
+
+            # Normalize orthophoto
+            if args.no_norm_orthophoto == False:
+                orthophoto = (orthophoto - 0.5) / 0.5
+
+            # Handle DSM convex hull sampling if needed
+            if args.dsm_convex_hull:
+                dsm_points = sample_points_in_convex_hull(B, dsm_points, num_query_points=args.num_points*2)
+
+            # Query points generation
+            if args.variable == '1':
+                query_points = create_query_points(B, dsm_points, num_query_points=args.num_query_points).to(device)
+            elif args.variable == '2':
+                query_points = sample_points_in_convex_hull(B, dsm_points, num_query_points=args.num_query_points)
+            elif args.variable == '3':
+                query_points = create_normalized_query_points(B, num_query_points=args.num_query_points)
+
+            # Compute ground truth occupancy
+            if args.top_k_gt_occupancy:
+                gt_occupancy = compute_occupancy_top_k(B, query_points, gt_mesh, top_k=args.top_k)
+            else: 
+                gt_occupancy = compute_occupancy(B, query_points, gt_mesh, threshold=25) # args.thres) ## TOSEE
+            gt_points = extract_threshold_occupied_points(gt_occupancy, query_points, threshold=0.5)
+
+            # Model prediction
+            if args.model in ['1', '4']: #, '2', '3'
+                occupancy_pred, class_logits = model(dsm_points, orthophoto, query_points)
+            elif args.model == '5' or args.model == '10' or args.model == '2' or args.model == '3' or args.model == '11':
+                occupancy_pred, class_logits, pred_colors = model(dsm_points, orthophoto, query_points)
+            else: 
+                occupancy_pred = model(dsm_points, orthophoto, query_points)
+            
+            probs = torch.sigmoid(occupancy_pred)
+            pred_points, topk_indices = extract_top_k_occupied_points(probs, query_points, args.top_k)
+
+            # Store normalized (original) tensors before denormalization
+            for b in range(B):
+                pred_fixed_norm = pad_or_trim_tensor(pred_points[b], args.num_points)
+                gt_fixed_norm = pad_or_trim_tensor(gt_points[b], args.num_points)
+                all_pred_tensors_original.append(pred_fixed_norm.cpu())
+                all_gt_tensors_original.append(gt_fixed_norm.cpu())
+
+            # Denormalize points back to original coordinates
+            pred_points = denormalize_from_unit_cube(pred_points, center_dsm, scale_dsm)
+            dsm_points = denormalize_from_unit_cube(dsm_points, center_dsm, scale_dsm)
+            gt_points = denormalize_from_unit_cube(gt_points, center_dsm, scale_dsm)
+
+            gt_mesh = denormalize_from_unit_cube(gt_mesh, center_dsm, scale_dsm)
+
+            # Process each batch element
+            for b in range(B):                
+                pred_fixed = pad_or_trim_tensor(pred_points[b], args.num_points)
+                gt_fixed = pad_or_trim_tensor(gt_points[b], args.num_points)
+                gt_mesh_fixed = pad_or_trim_tensor(gt_mesh[b], args.num_points)
+                all_gt_points.append(gt_fixed)
+                all_pred_points.append(pred_fixed)
+                all_dsm_points.append(dsm_points[b])
+                all_filenames.append(filenames[b])
+                all_gt_meshes.append(gt_mesh_fixed)
+                # Store ground truth colors
+                if gt_colors is not None:
+                    gt_colors_fixed = pad_or_trim_tensor(gt_colors[b], args.num_points)
+                    all_gt_colors.append(gt_colors_fixed)
+                if (args.model == '5' or args.model == '11' or args.model == '2' or args.model == '3'):
+                    pred_colors_p = pred_colors[b]
+                    all_pred_colors.append(pred_colors_p)
+                    all_topk_indices.append(topk_indices[b])
+
+        print(f'Total samples processed: {len(all_gt_points)}')
+        for b, pred in enumerate(all_pred_points):
+            pred = pred.unsqueeze(0) if pred.dim() == 2 else pred  # Ensure shape (B, N, 3)
+            chamfers = []
+            for i in range(len(all_gt_points)): 
+                gt_candidate = all_gt_points[i].unsqueeze(0).to(device) if all_gt_points[i].dim() == 2 else all_gt_points[i].to(device)
+                chamfer = compute_chamfer(pred, gt_candidate)
+                chamfers.append(chamfer.cpu().item())  # Ensure chamfer is converted to a CPU scalar
+
+            closest_idx = np.argmin(chamfers)
+            closest_matches.append(closest_idx)
+
+        # Count how many *unique* GT meshes were chosen (for comparison)
+        unique_matches = len(set(closest_matches))
+        total_predictions = len(closest_matches)
+
+        print(f"\n📊 Inter-sample Statistics (for comparison):")
+        print(f"Total Predictions: {total_predictions}")
+        print(f"Unique GT Matches: {unique_matches}")
+
+        variance_score = unique_matches / total_predictions  # Fraction of unique matches
+        print(f"Inter-sample Variance: {variance_score * 100:.2f}% unique matches")
+
+        for p in range(len(all_pred_points)):
+            if p > 15:
+                break
+            all_points = torch.cat([
+                all_pred_points[p][:, [0, 2, 1]],
+                all_gt_points[p][:, [0, 2, 1]],
+            ], dim=0)
+            labels = torch.cat([
+                torch.ones(all_gt_points[p].shape[0]),                 
+                2 * torch.ones(all_gt_points[p].shape[0])
+            ])
+            vis.scatter(
+                X=all_points,
+                Y=labels,
+                opts=dict(
+                    title=f"Results - {p}",
+                    markersize=2,
+                    legend=["Predicted", "GT"],
+                )
+            )
+
+
+        if (args.model == '5' or args.model == '11' or args.model == '2' or args.model == '3') and len(all_pred_colors) > 0 and len(all_gt_colors) > 0:
+            print("\nColor Validation (CIEDE2000 Delta E) with NN matching:")
+            avg_delta_e_list = []
+
+            for p in range(len(all_pred_points)):
+                # (1) Occupied predicted points & their colors (top-k)
+                pred_pts = all_pred_points[p].cpu().numpy()          # (K,3) world coords
+                pred_cols_full = all_pred_colors[p]
+                if isinstance(pred_cols_full, torch.Tensor):
+                    pred_cols_full = pred_cols_full.detach().cpu().numpy()
+                if pred_cols_full.shape[1] > 3:
+                    pred_cols_full = pred_cols_full[:, :3]
+
+                topk_idx = all_topk_indices[p].cpu().numpy()
+                pred_cols = pred_cols_full[topk_idx]                  # (K,3) model outputs
+
+                # (2) GT points & their colors
+                gt_pts = all_gt_points[p].cpu().numpy()               # (M,3)
+                gt_cols = all_gt_colors[p]
+                if isinstance(gt_cols, torch.Tensor):
+                    gt_cols = gt_cols.detach().cpu().numpy()
+                if gt_cols.shape[1] > 3:
+                    gt_cols = gt_cols[:, :3]
+
+                # Guard for empty sets
+                if pred_pts.shape[0] == 0 or gt_pts.shape[0] == 0:
+                    continue
+
+                # (3) NN match: for each predicted point, find closest GT point
+                knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(gt_pts)
+                _, idx = knn.kneighbors(pred_pts)
+                idx = idx.reshape(-1)
+                matched_gt_cols = gt_cols[idx]                        # (K,3)
+
+                # (4) Ensure sRGB uint8 and Lab
+                pred_cols_u8 = ensure_uint8_srgb(pred_cols)
+                gt_cols_u8   = ensure_uint8_srgb(matched_gt_cols)
+
+                pred_lab = srgb_to_lab_numpy_uint8(pred_cols_u8)
+                gt_lab   = srgb_to_lab_numpy_uint8(gt_cols_u8)
+
+                # print("Pred cols range:", pred_cols.min(), pred_cols.max())
+                # print("GT cols range:", gt_cols.min(), gt_cols.max())
+                # print("Pred u8 range:", pred_cols_u8.min(), pred_cols_u8.max())
+                # print("GT u8 range:", gt_cols_u8.min(), gt_cols_u8.max())
+
+                # (5) ΔE00 and average
+                delta_e = deltaE00_numpy(pred_lab, gt_lab)
+                avg_delta_e = float(np.mean(delta_e))
+                avg_delta_e_list.append(avg_delta_e)
+                print(f"Tree {p:03d}: Avg ΔE00 = {avg_delta_e:.2f}")
+
+            if avg_delta_e_list:
+                print(f"\nMean ΔE00 across trees: {np.mean(avg_delta_e_list):.2f}")
+
+        # Visualize predicted colors for top-k occupied points (model 5)
+        if args.model == '5' or args.model == '11' or args.model == '2' or args.model == '3':
+            for p in range(len(all_pred_points)):
+                pts_np = all_pred_points[p][:, [0, 2, 1]].cpu().numpy()
+                pred_colors_p = all_pred_colors[p]
+                if isinstance(pred_colors_p, torch.Tensor):
+                    pred_colors_p = pred_colors_p.detach().cpu().numpy()
+                if pred_colors_p.shape[1] > 3:
+                    pred_colors_p = pred_colors_p[:, :3]
+                if pred_colors_p.max() <= 1.0:
+                    pred_colors_p = (pred_colors_p * 255).astype(np.uint8)
+                else:
+                    pred_colors_p = pred_colors_p.astype(np.uint8)
+                topk_idx_np = all_topk_indices[p].cpu().numpy()
+                occupied_pred_colors = pred_colors_p[topk_idx_np]
+                if pts_np.shape[0] == occupied_pred_colors.shape[0]:
+                    vis.scatter(
+                        X=pts_np,
+                        win=f"Occupied-points-{all_filenames[p]}",
+                        opts=dict(
+                            title=f"Occupied Points with Predicted Color - {all_filenames[p]}",
+                            markercolor=occupied_pred_colors,
+                            markersize=6
+                        )
+                    )
+
+        chamfer_distances = []
+        normalized_chamfers = []
+        all_pred_tensors = []
+        all_gt_tensors = []
+        
+        for b, pred in enumerate(all_pred_points):
+            pred = pred.unsqueeze(0) if pred.dim() == 2 else pred  # Ensure shape (B, N, 3)
+            gt_candidate = all_gt_points[b].unsqueeze(0).to(device) if all_gt_points[b].dim() == 2 else all_gt_points[b].to(device)
+            chamfer = compute_chamfer(pred, gt_candidate)
+            tree_size = compute_tree_height(gt_candidate.squeeze(0))
+            normalized_chamfer = chamfer / tree_size
+            chamfer_distances.append(chamfer.cpu().item())  # Ensure chamfer is converted to a CPU scalar
+            normalized_chamfers.append(normalized_chamfer.cpu().item())  # Ensure chamfer is converted to a CPU scalar
+            
+            # Store for additional metrics
+            all_pred_tensors.append(pred.squeeze(0).cpu())
+            all_gt_tensors.append(gt_candidate.squeeze(0).cpu())
+
+        # Compute comprehensive metrics
+        avg_chamfer_rmse = compute_mean_chamfer(chamfer_distances)
+        chamfer_std = np.std(chamfer_distances)
+        avg_chamfer_norm = compute_mean_chamfer(normalized_chamfers)
+        
+        # Compute F1 score
+        all_pred_combined = torch.cat(all_pred_tensors_original, dim=0)
+        all_gt_combined = torch.cat(all_gt_tensors_original, dim=0)
+        f1_score, precision, recall = compute_f1_score(all_pred_combined, all_gt_combined, threshold=0.02) #02)
+        
+        # Compute Coverage, MMD, COV metrics
+        coverage, mmd, cov = compute_coverage_mmd_cov(all_pred_tensors, all_gt_tensors)
+        
+        # Calculate variance in predictions (fraction of unique matches)
+        variance_score = unique_matches / total_predictions * 100  # Percentage of unique matches
+        
+        # Organize results
+        results = {
+            'total_samples': len(all_pred_points),
+            'num_query_points': args.num_query_points,
+            'num_points': args.num_points,
+            'chamfer_rmse': avg_chamfer_rmse,
+            'chamfer_std': chamfer_std,
+            'normalized_chamfer': avg_chamfer_norm,
+            'f1_score': f1_score,
+            'precision': precision,
+            'recall': recall,
+            'coverage': coverage,
+            'mmd': mmd,
+            'cov': cov,
+            'unique_matches': unique_matches,
+            'total_predictions': total_predictions,
+            'variance_score': variance_score
+        }
+        
+        # Print organized results
+        print_evaluation_results(results)
+
+        # Create export folder
+        # export_dir = f"./landmarks_austria/{args.env}/pointclouds-landmarks" # pointclouds"
+        output_dir = f"./landmarks_austria/TREE_MODELS/{args.env}/"
+        export_dir = os.path.join(output_dir, "pointclouds-validation")
+        os.makedirs(export_dir, exist_ok=True)
+        for p in range(len(all_pred_points)):
+            pred_pts = all_pred_points[p][:, [0, 2, 1]]  # flip Y-Z
+            gt_pts = all_gt_points[p][:, [0, 2, 1]]
+            dsm_pts = all_dsm_points[p][:, [0, 2, 1]]  # assuming query ≈ DSM
+            gt_mesh_pts = all_gt_meshes[p][:, [0, 2, 1]]  # flip Y-Z for GT mesh
+            filename = all_filenames[p]
+            
+            # Extract tree ID from filename (e.g., "tree_0019" -> "19")
+            import re
+            match = re.search(r'tree_(\d+)', filename)
+            if match:
+                tree_id = match.group(1).lstrip('0') or '0'  # Remove leading zeros, keep '0' if all zeros
+            else:
+                tree_id = str(p)  # Fallback to sequential index if no match
+            
+            print(f"Saving tree {p}: filename='{filename}' -> tree_id='{tree_id}'")
+
+            # save_points_as_ply(pred_pts, filename=f"{export_dir}/tree_{p:03d}_pred.ply")
+            save_points_as_ply(gt_pts, filename=f"{export_dir}/tree_{tree_id}_gt.ply", colors=to_uint8_srgb(all_gt_colors[p].cpu().numpy()) if len(all_gt_colors) > p else None)
+            save_points_as_ply(dsm_pts, filename=f"{export_dir}/tree_{tree_id}_dsm.ply", colors=(100,100,100))
+            save_points_as_ply(gt_mesh_pts, filename=f"{export_dir}/tree_{tree_id}_gt_mesh.ply")
+
+            if args.model == '5' or args.model == '11' or args.model == '2' or args.model == '3':
+                pred_pts = all_pred_points[p][:, [0, 2, 1]].cpu().numpy()
+
+                pred_colors_p = all_pred_colors[p]
+                if isinstance(pred_colors_p, torch.Tensor):
+                    pred_colors_p = pred_colors_p.detach().cpu().numpy()
+                if pred_colors_p.shape[1] > 3:
+                    pred_colors_p = pred_colors_p[:, :3]
+                if pred_colors_p.max() <= 1.0:
+                    pred_colors_p = (pred_colors_p * 255).astype(np.uint8)
+                else:
+                    pred_colors_p = pred_colors_p.astype(np.uint8)
+                topk_idx_np = all_topk_indices[p].cpu().numpy()
+                occupied_pred_colors = pred_colors_p[topk_idx_np]
+
+                save_points_as_ply(pred_pts, f"{export_dir}/tree_{tree_id}_pred.ply",
+                                colors=occupied_pred_colors)
+            else:
+                save_points_as_ply(all_pred_points[p][:, [0, 2, 1]], f"{export_dir}/tree_{tree_id}_pred.ply")
+
+            # vis.scatter(
+            #     X=gt_pts,
+            #     Y=torch.ones(gt_pts.shape[0]),
+            #     opts=dict(
+            #         title=f"Predicted - {p} - {filename}",
+            #         markersize=2,
+            #         legend=["Predicted"],
+            #     )
+            # )
+
+
+           # print(f"Saved tree {p:03d} PLY files.")
+
+# CUDA_VISIBLE_DEVICES=2 python validation_pipeline_landmarks.py --env p2-occ_con_dec_shadow_silh --num_query_points 12000 --top_k 2500 --num_points 2500
+
+# rsync -avz -e "ssh -p 31415" grammatikakis1@dgxa100.icsd.hmu.gr:/home/grammatikakis1/P2-OCC/landmarks_austria/ "/mnt/c/Users/mmddd/Documents/P2-OCC/landmarks_austria"
+
+# CUDA_VISIBLE_DEVICES=1 python validation/validation_pipeline_landmarks.py --env occ_2 --num_query_points 20000 --top_k 2500 --num_points 5000 --variable 1
+
+# CUDA_VISIBLE_DEVICES=1 python validation/validation_pipeline.py --env test3 --num_query_points 20000 --top_k 5000 --num_points 5000 --model 4 --deciduous true --num_trees_total 35 --variable 1
+##  rsync -avz -e "ssh -p 31415" grammatikakis1@dgxa100.icsd.hmu.gr:/home/grammatikakis1/p2-tree-gen/landmarks_austria/test3/export-ply "/mnt/c/Users/mmddd/Documents/p2-tree-gen/landmarks_austria/models"
+
+
+# sed -i 's/\r$//' run_all_validations.sh
+# ./run_all_validations.sh
