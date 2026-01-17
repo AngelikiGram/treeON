@@ -40,7 +40,6 @@ To run the model using the pretrained weights, set the following argument:
 ```
 network-tree-gen/
 ├── train.py                   # Main training script
-├── convert_mat_to_obj.py      # Convert MAT files to OBJ format
 ├── auxiliary/                 # Core utilities and models
 │   ├── models/               # Neural network architectures
 │   ├── dataset/              # Dataset handling
