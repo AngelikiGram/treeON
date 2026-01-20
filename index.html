@@ -225,6 +225,150 @@
             border-radius: 4px;
         }
 
+        /* ===== RESOURCE HEADER ===== */
+
+        .resource-groups {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            margin: 32px auto 12px;
+            flex-wrap: wrap;
+        }
+
+        /* center the whole resource group row */
+        .resource-groups {
+            justify-content: center !important;
+            gap: 24px;
+            margin: 32px auto 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Ensure all resource boxes stack title on top and items below,
+           and that all boxes start at the same top height inside the flex row */
+        .resource-groups > div {
+            align-self: flex-start !important; /* override inline align-self */
+        }
+
+        .resource-group-code,
+        .resource-group-paper,
+        .resource-group-data {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            min-width: 140px;
+            min-height: 110px;      /* ensure consistent box height */
+            background: #fafafa;
+            margin: 0;
+            display: flex;
+            flex-direction: column; /* title on top, elements below */
+            align-items: center;
+            justify-content: flex-start; /* keep content starting at top */
+            gap: 8px;
+        }
+
+        /* Slightly different sizing for the three groups if needed */
+        .resource-group-code {
+            min-width: 160px;
+        }
+        .resource-group-paper {
+            padding: 10px;
+            min-width: 140px;
+        }
+        .resource-group-data {
+            min-width: 140px;
+            max-width: 160px;
+        }
+        /* Small spacing tweaks so title appears clearly above items */
+        .resource-group-title {
+            margin-top: 4px;
+            margin-bottom: 6px;
+            width: 100%;
+        }
+
+        .resource-items {
+            margin-top: 0;
+        }
+
+        .resource-group-title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #333;
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        a[href*="orcid.org"] {
+            text-decoration: none !important;
+            vertical-align: super;
+        }
+
+        a[href*="orcid.org"] img {
+            height: 14px;          /* slightly smaller */
+            vertical-align: middle;
+        }
+
+        .resource-items {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px 14px;
+            justify-items: center;
+        }
+
+        /* Make the data resource group narrower */
+        .resource-group-data {
+            min-width: 110px !important;
+            max-width: 130px !important;
+            width: 120px !important;
+        }
+
+        .resource-item {
+            text-align: center;
+            width: 110px;
+        }
+
+        .resource-item a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .resource-item i {
+            font-size: 30px;
+        }
+
+        .resource-item img {
+            height: 30px;
+        }
+
+        .resource-label {
+            font-size: 14px;
+            margin-top: 6px;
+            color: #111;
+            line-height: 1.15;
+        }
+
+        .resource-sub {
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Add to the end of the main CSS block (after .resource-item styles) */
+        .resource-doi {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #666;
+            line-height: 1.2;
+            opacity: 0.85;
+            font-style: italic;
+        }
+        .resource-doi a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .resource-doi a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -267,11 +411,40 @@ document.addEventListener('DOMContentLoaded', function() {
     <h1>TreeON: Reconstructing 3D Tree Point Clouds from Orthophotos and Heightmaps</h1>
 
     <div style="margin: 16px 0 4px 0; font-size: 18px;">
-        <span>Angeliki Grammatikaki<sup>*1</sup></span> &bull; 
-        <span>Johannes Eschner<sup>*1</sup></span> &bull; 
-        <span>Pedro Hermosilla<sup>*1</sup></span> &bull; 
-        <span>Oscar Argudo<sup>*2</sup></span> &bull; 
-        <span>Manuela Waldner<sup>*1</sup></span>
+        <span>
+            Angeliki Grammatikaki<sup>*1</sup>
+            <a href="https://orcid.org/0000-0001-5779-2182" target="_blank" title="ORCID: Angeliki Grammatikaki" style="margin-left:2px; vertical-align:middle;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/ORCID_iD.svg" alt="ORCID" style="height:16px; vertical-align:middle;">
+            </a>
+        </span>
+        <span style="margin:0 18px;"></span>
+        <span>
+            Johannes Eschner<sup>*1</sup>
+            <a href="https://orcid.org/0009-0001-6784-8503" target="_blank" title="ORCID: Johannes Eschner" style="margin-left:2px; vertical-align:middle;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/ORCID_iD.svg" alt="ORCID" style="height:16px; vertical-align:middle;">
+            </a>
+        </span>
+        <span style="margin:0 18px;"></span>
+        <span>
+            Pedro Hermosilla<sup>*1</sup>
+            <a href="https://orcid.org/0000-0003-3586-4741" target="_blank" title="ORCID: Pedro Hermosilla" style="margin-left:2px; vertical-align:middle;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/ORCID_iD.svg" alt="ORCID" style="height:16px; vertical-align:middle;">
+            </a>
+        </span>
+        <span style="margin:0 18px;"></span>
+        <span>
+            Oscar Argudo<sup>*2</sup>
+            <a href="https://orcid.org/0000-0003-3943-1839" target="_blank" title="ORCID: Oscar Argudo" style="margin-left:2px; vertical-align:middle;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/ORCID_iD.svg" alt="ORCID" style="height:16px; vertical-align:middle;">
+            </a>
+        </span>
+        <span style="margin:0 18px;"></span>
+        <span>
+            Manuela Waldner<sup>*1</sup>
+            <a href="https://orcid.org/0000-0003-1387-5132" target="_blank" title="ORCID: Manuela Waldner" style="margin-left:2px; vertical-align:middle;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/ORCID_iD.svg" alt="ORCID" style="height:16px; vertical-align:middle;">
+            </a>
+        </span>
     </div>
     <div style="margin-bottom: 12px; font-size: 16px;">
         <span><sup>*1</sup> TU Wien</span><br>
@@ -279,35 +452,82 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 
     <!-- LINKS WITH ICONS -->
-    <div class="resource-links" style="margin-bottom: 16px;">
-        <a href="https://paper-link" title="Paper Link">
-            <i class="fa-solid fa-file-lines"></i> Paper
-        </a>
-        <a href="https://github.com/AngelikiGram/TreeON" title="Network Repository">
-            <i class="fa-brands fa-github"></i> TreeON
-        </a>
-        <a href="https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view?usp=sharing" title="Pretrained Model Weights">
-            <img src="https://img.icons8.com/color/32/000000/google-drive--v2.png" style="vertical-align:middle; margin-right:6px; height:22px;"> Pretrained Model Weights
-        </a>
-        <a href="https://github.com/AngelikiGram/Synthetic-Tree-Dataset-Generation" title="Synthetic Dataset Generation">
-            <i class="fa-brands fa-github"></i> Dataset Generation
-        </a>
-        <br>
-        <a href="https://github.com/AngelikiGram/Single-Multiple-Tree-Scene-Generation" title="Scene Generation">
-            <i class="fa-brands fa-github"></i> Scene Generation
-        </a>
-        <a href="https://doi.org/10.48436/cnw9n-zxw07" title="Synthetic Dataset" style="display:inline-flex; align-items:center; margin-right:14px;">
-            <i class="fa-solid fa-database" style="font-size:22px; color:#0066cc; margin-right:6px;"></i>
-            <span style="font-size:20px; color:#0066cc; font-weight:500;">Synthetic Trees Dataset (GeoTree3D)</span>
-        </a>
-        <div style="display:inline-block; vertical-align:middle; margin-left:8px;">
-            <a href="https://doi.org/10.48436/cnw9n-zxw07" title="DOI for Synthetic Trees Dataset">
-                <img src="https://researchdata.tuwien.ac.at/badge/DOI/10.48436/cnw9n-zxw07.svg" alt="DOI badge" style="height:24px; vertical-align:middle;">
-            </a>
+    <!-- CODE -->
+    <div class="resource-groups">
+        <!-- PAPER GROUP (center) -->
+        <div class="resource-group-paper" style="align-self: center;">
+            <div class="resource-group-title">Paper</div>
+            <div class="resource-items">
+                <div class="resource-item">
+                    <a href="https://paper-link">
+                        <i class="fa-solid fa-file-lines"></i>
+                    </a>
+                    <div class="resource-label">Paper</div>
+                    <div class="resource-sub">Publication</div>
+                </div>
+                <div class="resource-item">
+                    <a href="supplementary.pdf">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </a>
+                    <div class="resource-label">Supplementary</div>
+                    <div class="resource-sub">PDF</div>
+                </div>
+            </div>
         </div>
-        <a href="supplementary.pdf" title="PDF Supplementary Material">
-            <i class="fa-solid fa-file-pdf"></i> Supplementary Material
-        </a>
+        <!-- CODE GROUP (left) -->
+        <div class="resource-group-code" style="align-self: flex-start;">
+            <div class="resource-group-title">Code</div>
+            <div class="resource-items">
+                <div class="resource-item">
+                    <a href="https://github.com/AngelikiGram/TreeON">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                    <div class="resource-label">TreeON</div>
+                    <div class="resource-sub">Model code</div>
+                </div>
+                <div class="resource-item">
+                    <a href="https://drive.google.com/file/d/1zVpkl4hREym_-UoGFSODrlAYETtT8Qcl/view">
+                        <img src="https://img.icons8.com/color/48/000000/google-drive--v2.png" style="height:30px;" alt="Google Drive">
+                    </a>
+                    <div class="resource-label">Pretrained</div>
+                    <div class="resource-sub">Model weights</div>
+                </div>
+                <div class="resource-item">
+                    <a href="https://github.com/AngelikiGram/Synthetic-Tree-Dataset-Generation">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                    <div class="resource-label">Data generation</div>
+                    <div class="resource-sub">Synthetic trees</div>
+                </div>
+                <div class="resource-item">
+                    <a href="https://github.com/AngelikiGram/Single-Multiple-Tree-Scene-Generation">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                    <div class="resource-label">Scene generation</div>
+                    <div class="resource-sub">Rendering code</div>
+                </div>
+            </div>
+        </div>
+        <!-- DATA GROUP (right) -->
+        <div class="resource-group-data" style="align-self: flex-end; min-width:140px; max-width:180px;">
+            <div class="resource-group-title">Data</div>
+            <div class="resource-items">
+                <div class="resource-item">
+                    <a href="https://doi.org/10.48436/cnw9n-zxw07">
+                        <i class="fa-solid fa-database"></i>
+                    </a>
+                    <div class="resource-label">Synthetic Trees</div>
+                    <div class="resource-sub">Dataset (GeoTree3D)</div>
+                    <div class="resource-doi">
+                        DOI:
+                        <a href="https://doi.org/10.48436/cnw9n-zxw07">
+                            10.48436/cnw9n-zxw07
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- TEASER IMAGE -->
@@ -638,7 +858,7 @@ target photo. Right: Rows show reconstructions from DSM, orthophoto, or both inp
     <div class="section" style="max-width:700px; margin:32px auto 0; font-size:15px; background:#f5f5f5; border-radius:6px; padding:18px;">
         <h2 style="font-size:20px; border-bottom:1px solid #ddd; padding-bottom:4px; margin-bottom:10px;">Citation</h2>
         <p style="word-break:break-all;">
-            Grammatikaki, A., Eschner, J., Hermosilla, P., Argudo, O., Waldner, M. (2025). TreeON: Reconstructing 3D Tree Point Clouds from Orthophotos and Heightmaps. <i>Conference/Journal Name</i>. <a href="https://your-paper-link">https://your-paper-link</a>
+            Grammatikaki, A., Eschner, J., Hermosilla, P., Argudo, O., Waldner, M. (2025). TreeON: Reconstructing 3D Tree Point Clouds from Orthophotos and Heightmaps. <i>Conference/Journal Name</i>. <a href="https://paper-link">https://paper-link</a>
         </p>
     </div>
 </footer> -->
