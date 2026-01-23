@@ -366,14 +366,6 @@
             text-decoration: underline;
         }
     </style>
-        <!-- Google Analytics -->
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-0C3EWC0LZM'); // Replace G-XXXXXXXXXX with your Measurement ID
-        </script>
 </head>
 
 <body>
@@ -384,6 +376,27 @@
 </div>
 </script>
 <script>
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.pdf-placeholder').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.getElementById('pdf-modal').style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            });
+        });
+        document.getElementById('pdf-modal-close').onclick = function () {
+            document.getElementById('pdf-modal').style.display = 'none';
+            document.body.style.overflow = '';
+        };
+        document.getElementById('pdf-modal').onclick = function (e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        };
+    });
+
 // Image preview modal logic
 document.addEventListener('DOMContentLoaded', function() {
     // Attach click listeners to all images in tables
@@ -455,6 +468,30 @@ document.addEventListener('DOMContentLoaded', function() {
         <span><sup>*2</sup> Universitat Politècnica de Catalunya</span>
     </div>
 
+    <!-- PDF Placeholder Modal -->
+    <div id="pdf-modal"
+        style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100vw; height:100vh;
+                background:rgba(0,0,0,0.75); align-items:center; justify-content:center;">
+
+        <div style="background:#fff; padding:28px 32px; border-radius:10px;
+                    max-width:420px; width:90%; text-align:center; box-shadow:0 8px 40px rgba(0,0,0,0.3);">
+
+            <!-- <h3 style="margin-top:0; font-size:20px;">Coming Soon</h3> -->
+
+            <p style="font-size:18px; line-height:1.5; color:#333;">
+                The paper and supplementary material will be made available
+                upon <b>final acceptance</b>.
+            </p>
+
+            <button id="pdf-modal-close"
+                    style="margin-top:18px; padding:8px 18px; font-size:14px;
+                        border:none; border-radius:6px; cursor:pointer;
+                        background:#0066cc; color:#fff;">
+                Close
+            </button>
+        </div>
+    </div>
+
     <!-- LINKS WITH ICONS -->
     <!-- CODE -->
     <div class="resource-groups">
@@ -463,14 +500,16 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="resource-group-title">Paper</div>
             <div class="resource-items">
                 <div class="resource-item">
-                    <a href="docs/pdfs/TreeON__Reconstructing_3D_Tree_Point_Clouds_from_Orthophotos_and_Heightmaps_Revised.pdf">
+                    <!-- <a href="docs/pdfs/TreeON__Reconstructing_3D_Tree_Point_Clouds_from_Orthophotos_and_Heightmaps_Revised.pdf"> -->
+                    <a href="#" class="pdf-placeholder" data-type="paper">
                         <i class="fa-solid fa-file-lines"></i>
                     </a>
                     <div class="resource-label">Paper</div>
                     <div class="resource-sub">Publication</div>
-                </div>
+               </div>
                 <div class="resource-item">
-                    <a href="docs/pdfs/treeON_Supplementary_Material.pdf">
+                    <!-- <a href="docs/pdfs/treeON_Supplementary_Material.pdf"> -->
+                    <a href="#" class="pdf-placeholder" data-type="supplementary">
                         <i class="fa-solid fa-file-lines"></i>
                     </a>
                     <div class="resource-label">Supplementary</div>
